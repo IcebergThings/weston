@@ -202,6 +202,9 @@ binding_key(struct weston_keyboard_grab *grab,
 			if (keyboard->input_method_resource)
 				keyboard->grab = &keyboard->input_method_grab;
 			free(b);
+		} else {
+			/* Don't send the key press event for the binding key */
+			return;
 		}
 	} else if (!wl_list_empty(&keyboard->focus_resource_list)) {
 		serial = wl_display_next_serial(display);
@@ -277,7 +280,7 @@ weston_compositor_run_key_binding(struct weston_compositor *compositor,
 
 			/* If this was a key binding and it didn't
 			 * install a keyboard grab, install one now to
-			 * swallow the key release. */
+			 * swallow the key press. */
 			if (seat->keyboard->grab ==
 			    &seat->keyboard->default_grab)
 				install_binding_grab(seat, time, key);
