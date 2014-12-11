@@ -922,7 +922,7 @@ x11_compositor_find_output(struct x11_compositor *c, xcb_window_t window)
 			return output;
 	}
 
-	assert(0);
+	return NULL;
 }
 
 static void
@@ -931,7 +931,8 @@ x11_compositor_delete_window(struct x11_compositor *c, xcb_window_t window)
 	struct x11_output *output;
 
 	output = x11_compositor_find_output(c, window);
-	x11_output_destroy(&output->base);
+	if (output)
+		x11_output_destroy(&output->base);
 
 	xcb_flush(c->conn);
 
@@ -994,6 +995,8 @@ x11_compositor_deliver_button_event(struct x11_compositor *c,
 	struct x11_output *output;
 
 	output = x11_compositor_find_output(c, button_event->event);
+	if (!output)
+		return;
 
 	if (state)
 		xcb_grab_pointer(c->conn, 0, output->window,
@@ -1072,6 +1075,9 @@ x11_compositor_deliver_motion_event(struct x11_compositor *c,
 	if (!c->has_xkb)
 		update_xkb_state_from_core(c, motion_notify->state);
 	output = x11_compositor_find_output(c, motion_notify->event);
+	if (!output)
+		return;
+
 	weston_output_transform_coordinate(&output->base,
 					   wl_fixed_from_int(motion_notify->event_x),
 					   wl_fixed_from_int(motion_notify->event_y),
@@ -1098,6 +1104,9 @@ x11_compositor_deliver_enter_event(struct x11_compositor *c,
 	if (!c->has_xkb)
 		update_xkb_state_from_core(c, enter_notify->state);
 	output = x11_compositor_find_output(c, enter_notify->event);
+	if (!output)
+		return;
+
 	weston_output_transform_coordinate(&output->base,
 					   wl_fixed_from_int(enter_notify->event_x),
 					   wl_fixed_from_int(enter_notify->event_y), &x, &y);
@@ -1247,6 +1256,9 @@ x11_compositor_handle_event(int fd, uint32_t mask, void *data)
 		case XCB_EXPOSE:
 			expose = (xcb_expose_event_t *) event;
 			output = x11_compositor_find_output(c, expose->window);
+			if (!output)
+				break;
+
 			weston_output_damage(&output->base);
 			weston_output_schedule_repaint(&output->base);
 			break;
