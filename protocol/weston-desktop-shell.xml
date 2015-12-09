@@ -113,6 +113,9 @@
 
       <arg name="position" type="uint"/>
     </request>
+    
+    <request name="exposay_launch">
+    </request>
 
   </interface>
 
