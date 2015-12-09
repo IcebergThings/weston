@@ -16,7 +16,7 @@
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * FITNESS FOR A PARTICULAR PUloRPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
  * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
@@ -278,6 +278,8 @@ shell_surface_is_xdg_popup(struct shell_surface *shsurf);
 static void
 shell_surface_set_parent(struct shell_surface *shsurf,
                          struct weston_surface *parent);
+
+struct weston_seat *global_seat;
 
 static int
 shell_surface_get_label(struct weston_surface *surface, char *buf, size_t len)
@@ -4552,6 +4554,22 @@ desktop_shell_set_panel_position(struct wl_client *client,
 	shell->panel_position = position;
 }
 
+static void
+desktop_shell_exposay_launch(struct wl_client *client,
+				 struct wl_resource *resource)
+{
+	//struct desktop_shell *shell = wl_resource_get_user_data(resource);
+	weston_log("Exposay launch\n");
+	struct desktop_shell *shell = global_shell;
+	if (&shell->exposay == NULL) {
+		weston_log("Can not get desktop-shell\n");
+	} else {
+		shell->exposay.state_target = EXPOSAY_TARGET_OVERVIEW;
+		shell->exposay.seat = global_seat;
+		exposay_check_state_ns(shell);
+	}
+}
+
 static const struct weston_desktop_shell_interface desktop_shell_implementation = {
 	desktop_shell_set_background,
 	desktop_shell_set_panel,
@@ -4559,7 +4577,8 @@ static const struct weston_desktop_shell_interface desktop_shell_implementation 
 	desktop_shell_unlock,
 	desktop_shell_set_grab_surface,
 	desktop_shell_desktop_ready,
-	desktop_shell_set_panel_position
+	desktop_shell_set_panel_position,
+	desktop_shell_exposay_launch
 };
 
 static enum shell_surface_type
@@ -5056,6 +5075,8 @@ activate(struct desktop_shell *shell, struct weston_surface *es,
 	lower_fullscreen_layer(shell, shsurf->output);
 
 	weston_surface_activate(es, seat);
+
+	global_seat = seat;
 
 	state = ensure_focus_state(shell, seat);
 	if (state == NULL)
