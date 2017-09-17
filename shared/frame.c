@@ -107,8 +107,8 @@ struct frame {
 
 static struct frame_button *
 frame_button_create(struct frame *frame, const char *icon,
-		    enum frame_status status_effect,
-		    enum frame_button_flags flags)
+                    enum frame_status status_effect,
+                    enum frame_button_flags flags)
 {
 	struct frame_button *button;
 
@@ -331,39 +331,39 @@ frame_create(struct theme *t, int32_t width, int32_t height, uint32_t buttons,
 
 	if (title) {
 		button = frame_button_create(frame,
-					     DATADIR "/weston/icon_window.png",
-					     FRAME_STATUS_MENU,
-					     FRAME_BUTTON_CLICK_DOWN);
+		                             DATADIR "/weston/icon_window.png",
+		                             FRAME_STATUS_MENU,
+		                             FRAME_BUTTON_CLICK_DOWN);
 		if (!button)
 			goto free_frame;
 	}
 
 	if (buttons & FRAME_BUTTON_CLOSE) {
 		button = frame_button_create(frame,
-					     DATADIR "/weston/sign_close.png",
-					     FRAME_STATUS_CLOSE,
-					     FRAME_BUTTON_ALIGN_RIGHT |
-					     FRAME_BUTTON_DECORATED);
+		                             DATADIR "/weston/sign_close.png",
+		                             FRAME_STATUS_CLOSE,
+		                             FRAME_BUTTON_ALIGN_RIGHT |
+		                             FRAME_BUTTON_DECORATED);
 		if (!button)
 			goto free_frame;
 	}
 
 	if (buttons & FRAME_BUTTON_MAXIMIZE) {
 		button = frame_button_create(frame,
-					     DATADIR "/weston/sign_maximize.png",
-					     FRAME_STATUS_MAXIMIZE,
-					     FRAME_BUTTON_ALIGN_RIGHT |
-					     FRAME_BUTTON_DECORATED);
+		                             DATADIR "/weston/sign_maximize.png",
+		                             FRAME_STATUS_MAXIMIZE,
+		                             FRAME_BUTTON_ALIGN_RIGHT |
+		                             FRAME_BUTTON_DECORATED);
 		if (!button)
 			goto free_frame;
 	}
 
 	if (buttons & FRAME_BUTTON_MINIMIZE) {
 		button = frame_button_create(frame,
-					     DATADIR "/weston/sign_minimize.png",
-					     FRAME_STATUS_MINIMIZE,
-					     FRAME_BUTTON_ALIGN_RIGHT |
-					     FRAME_BUTTON_DECORATED);
+		                             DATADIR "/weston/sign_minimize.png",
+		                             FRAME_STATUS_MINIMIZE,
+		                             FRAME_BUTTON_ALIGN_RIGHT |
+		                             FRAME_BUTTON_DECORATED);
 		if (!button)
 			goto free_frame;
 	}

@@ -931,8 +931,8 @@ weston_wm_window_create_frame(struct weston_wm_window *window)
 		buttons |= FRAME_BUTTON_MAXIMIZE;
 
 	window->frame = frame_create(window->wm->theme,
-				     window->width, window->height,
-				     buttons, window->name);
+	                             window->width, window->height,
+	                             buttons, window->name);
 	frame_resize_inside(window->frame, window->width, window->height);
 
 	weston_wm_window_get_frame_size(window, &width, &height);

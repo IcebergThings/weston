@@ -146,7 +146,7 @@ render_shadow(cairo_t *cr, cairo_surface_t *surface,
 	cairo_matrix_t matrix;
 	int i, fx, fy, shadow_height, shadow_width;
 
-	cairo_set_source_rgba(cr, 0, 0, 0, 0.45);
+	cairo_set_source_rgba(cr, 0, 0, 0, 0.25);
 	cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
 	pattern = cairo_pattern_create_for_surface (surface);
 	cairo_pattern_set_filter(pattern, CAIRO_FILTER_NEAREST);
@@ -364,16 +364,20 @@ load_cairo_surface(const char *filename)
 void
 theme_set_background_source(struct theme *t, cairo_t *cr, uint32_t flags)
 {
-	cairo_pattern_t *pattern;
+	//cairo_pattern_t *pattern;
+	const float theme_r = 0.98, theme_g = 0.97, theme_b = 0.96;
 
 	if (flags & THEME_FRAME_ACTIVE) {
+		/*
 		pattern = cairo_pattern_create_linear(16, 16, 16, 112);
 		cairo_pattern_add_color_stop_rgb(pattern, 0.0, 1.0, 1.0, 1.0);
 		cairo_pattern_add_color_stop_rgb(pattern, 0.2, 0.8, 0.8, 0.8);
 		cairo_set_source(cr, pattern);
 		cairo_pattern_destroy(pattern);
+		*/
+		cairo_set_source_rgba(cr, theme_r, theme_g, theme_b, 1);
 	} else {
-		cairo_set_source_rgba(cr, 0.75, 0.75, 0.75, 1);
+		cairo_set_source_rgba(cr, theme_r * 0.9, theme_g * 0.9, theme_b * 0.9, 1.0);
 	}
 }
 
@@ -388,13 +392,13 @@ theme_create(void)
 		return NULL;
 
 	t->margin = 32;
-	t->width = 6;
-	t->titlebar_height = 27;
-	t->frame_radius = 3;
+	t->width = 1;
+	t->titlebar_height = 32;
+	t->frame_radius = 2;
 	t->shadow = cairo_image_surface_create (CAIRO_FORMAT_ARGB32, 128, 128);
 	cr = cairo_create(t->shadow);
 	cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
-	cairo_set_source_rgba(cr, 0, 0, 0, 1);
+	cairo_set_source_rgba(cr, 0, 0, 0, 0);
 	rounded_rect(cr, 32, 32, 96, 96, t->frame_radius);
 	cairo_fill(cr);
 	if (cairo_status (cr) != CAIRO_STATUS_SUCCESS)
@@ -470,8 +474,8 @@ theme_render_frame(struct theme *t,
 		margin = 0;
 	else {
 		render_shadow(cr, t->shadow,
-			      2, 2, width + 8, height + 8,
-			      64, 64);
+		              -4, -4, width + 8, height + 8,
+		              64, 64);
 		margin = t->margin;
 	}
 
@@ -486,21 +490,21 @@ theme_render_frame(struct theme *t,
 		top_margin = t->width;
 
 	tile_source(cr, source,
-		    margin, margin,
-		    width - margin * 2, height - margin * 2,
-		    t->width, top_margin);
+	            margin, margin,
+	            width - margin * 2, height - margin * 2,
+	            t->width, top_margin);
 
 	if (title || !wl_list_empty(buttons)) {
 		cairo_rectangle (cr, margin + t->width, margin,
-				 width - (margin + t->width) * 2,
-				 t->titlebar_height - t->width);
+		                     width - (margin + t->width) * 2,
+		                     t->titlebar_height - t->width);
 		cairo_clip(cr);
 
 		cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
 		cairo_select_font_face(cr, "sans",
-				       CAIRO_FONT_SLANT_NORMAL,
-				       CAIRO_FONT_WEIGHT_BOLD);
-		cairo_set_font_size(cr, 14);
+		                       CAIRO_FONT_SLANT_NORMAL,
+		                       CAIRO_FONT_WEIGHT_BOLD);
+		cairo_set_font_size(cr, 16);
 		cairo_text_extents(cr, title, &extents);
 		cairo_font_extents (cr, &font_extents);
 		x = (width - extents.width) / 2;
@@ -510,9 +514,11 @@ theme_render_frame(struct theme *t,
 			font_extents.ascent;
 
 		if (flags & THEME_FRAME_ACTIVE) {
+			/*
 			cairo_move_to(cr, x + 1, y  + 1);
 			cairo_set_source_rgb(cr, 1, 1, 1);
 			cairo_show_text(cr, title);
+			*/
 			cairo_move_to(cr, x, y);
 			cairo_set_source_rgb(cr, 0, 0, 0);
 			cairo_show_text(cr, title);
