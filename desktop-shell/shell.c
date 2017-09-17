@@ -3103,6 +3103,17 @@ desktop_shell_set_lock_surface(struct wl_client *client,
 	weston_surface_set_label_func(surface, lock_surface_get_label);
 }
 
+static void desktop_shell_toggle_exposay(struct wl_client *client,
+                                         struct wl_resource *resource,
+                                         uint32_t state,
+                                         struct wl_resource *seat)
+{
+	struct desktop_shell *shell = wl_resource_get_user_data(resource);
+	struct wl_seat *wl_seat = wl_resource_get_user_data(seat);
+
+	exposay_activate(shell, (struct weston_seat*)wl_seat);
+}
+
 static void
 resume_desktop(struct desktop_shell *shell)
 {
@@ -3182,6 +3193,7 @@ static const struct weston_desktop_shell_interface desktop_shell_implementation 
 	desktop_shell_set_background,
 	desktop_shell_set_panel,
 	desktop_shell_set_lock_surface,
+	desktop_shell_toggle_exposay,
 	desktop_shell_unlock,
 	desktop_shell_set_grab_surface,
 	desktop_shell_desktop_ready,

@@ -247,6 +247,9 @@ void
 exposay_binding(struct weston_keyboard *keyboard,
 		enum weston_keyboard_modifier modifier,
 		void *data);
+
+void exposay_activate(struct desktop_shell *shell, struct weston_seat* seat);
+
 int
 input_panel_setup(struct desktop_shell *shell);
 void

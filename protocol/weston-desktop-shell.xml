@@ -21,6 +21,11 @@
       <arg name="surface" type="object" interface="wl_surface"/>
     </request>
 
+    <request name="toggle_exposay">
+      <arg name="state" type="uint"/>
+      <arg name="seat" type="object" interface="wl_seat"/>
+    </request>
+
     <request name="unlock"/>
 
     <request name="set_grab_surface">

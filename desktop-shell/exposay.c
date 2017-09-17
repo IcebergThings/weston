@@ -691,3 +691,7 @@ exposay_binding(struct weston_keyboard *keyboard, enum weston_keyboard_modifier 
 
 	exposay_set_state(shell, EXPOSAY_TARGET_OVERVIEW, keyboard->seat);
 }
+
+void exposay_activate(struct desktop_shell *shell, struct weston_seat* seat) {
+	exposay_set_state(shell, EXPOSAY_TARGET_OVERVIEW, seat);
+}
