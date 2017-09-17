@@ -95,7 +95,9 @@ struct panel {
 	struct surface base;
 	struct window *window;
 	struct widget *widget;
+	struct desktop *desktop;
 	struct wl_list launcher_list;
+	struct wl_list trigger_list;
 	struct panel_clock *clock;
 	int painted;
 	enum weston_desktop_shell_panel_position panel_position;
@@ -132,6 +134,23 @@ struct panel_launcher {
 	struct wl_list link;
 	struct wl_array envp;
 	struct wl_array argv;
+};
+
+struct panel_internal_trigger;
+
+typedef void (*trigger_handler)(struct panel_internal_trigger *trigger, struct input* input);
+
+struct panel_internal_trigger {
+	struct widget *widget;
+	struct panel *panel;
+	cairo_surface_t *icon;
+	int focused, pressed;
+	trigger_handler handler;
+	void *data_buf;
+	struct wl_list link;
+	char* toolip;
+	char* text;
+	int width;
 };
 
 struct panel_clock {
@@ -216,6 +235,66 @@ panel_launcher_activate(struct panel_launcher *widget)
 		fprintf(stderr, "execl '%s' failed: %m\n", argv[0]);
 		exit(1);
 	}
+}
+
+static void
+panel_trigger_redraw_handler(struct widget *widget, void *data)
+{
+	struct panel_internal_trigger *trigger = data;
+	struct rectangle allocation;
+	cairo_t *cr;
+
+	cr = widget_cairo_create(trigger->panel->widget);
+
+	widget_get_allocation(widget, &allocation);
+	if (trigger->pressed) {
+		allocation.x++;
+		allocation.y++;
+	}
+
+	cairo_set_source_surface(cr, trigger->icon,
+				 allocation.x, allocation.y);
+	cairo_paint(cr);
+
+	int icon_w = cairo_image_surface_get_width(trigger->icon);
+
+	cairo_select_font_face(cr, "sans",
+						 CAIRO_FONT_SLANT_NORMAL,
+						 CAIRO_FONT_WEIGHT_NORMAL);
+	cairo_set_font_size(cr, 14);
+	cairo_move_to(cr, allocation.x + icon_w + 5,
+	              allocation.y + 3 * (allocation.height >> 2) + 1);
+	cairo_set_source_rgb(cr, 0, 0, 0);
+
+	if (trigger->focused) {
+		cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.2);
+		cairo_mask_surface(cr, trigger->icon,
+		                   allocation.x, allocation.y);
+
+		cairo_move_to(cr, allocation.x + icon_w + 4,
+		              allocation.y + 3 * (allocation.height >> 2));
+		cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+		cairo_show_text(cr, trigger->text);
+	} else {
+		cairo_show_text(cr, trigger->text);
+		cairo_move_to(cr, allocation.x + icon_w + 4,
+		              allocation.y + 3 * (allocation.height >> 2));
+		cairo_set_source_rgb(cr, 0.8, 0.8, 0.8);
+		cairo_show_text(cr, trigger->text);
+	}
+
+	cairo_destroy(cr);
+}
+
+static int
+panel_trigger_motion_handler(struct widget *widget, struct input *input,
+			      uint32_t time, float x, float y, void *data)
+{
+	struct panel_internal_trigger *trigger = data;
+
+	widget_set_tooltip(widget, trigger->toolip, x, y);
+
+	return CURSOR_LEFT_PTR;
 }
 
 static void
@@ -349,6 +428,68 @@ panel_launcher_touch_up_handler(struct widget *widget, struct input *input,
 	panel_launcher_activate(launcher);
 }
 
+static int
+panel_trigger_enter_handler(struct widget *widget, struct input *input,
+                            float x, float y, void *data)
+{
+	struct panel_internal_trigger *trigger = data;
+
+	trigger->focused = 1;
+	widget_schedule_redraw(widget);
+
+	return CURSOR_LEFT_PTR;
+}
+
+static void
+panel_trigger_leave_handler(struct widget *widget,
+			     struct input *input, void *data)
+{
+	struct panel_internal_trigger *trigger = data;
+
+	trigger->focused = 0;
+	widget_destroy_tooltip(widget);
+	widget_schedule_redraw(widget);
+}
+
+static void
+panel_trigger_button_handler(struct widget *widget,
+			      struct input *input, uint32_t time,
+			      uint32_t button,
+			      enum wl_pointer_button_state state, void *data)
+{
+	struct panel_internal_trigger *trigger;
+
+	trigger = widget_get_user_data(widget);
+	widget_schedule_redraw(widget);
+	if (state == WL_POINTER_BUTTON_STATE_RELEASED)
+		trigger->handler(trigger, input);
+}
+
+static void
+panel_trigger_touch_down_handler(struct widget *widget, struct input *input,
+				  uint32_t serial, uint32_t time, int32_t id,
+				  float x, float y, void *data)
+{
+	struct panel_internal_trigger *trigger;
+
+	trigger = widget_get_user_data(widget);
+	trigger->focused = 1;
+	widget_schedule_redraw(widget);
+}
+
+static void
+panel_trigger_touch_up_handler(struct widget *widget, struct input *input,
+				uint32_t serial, uint32_t time, int32_t id,
+				void *data)
+{
+	struct panel_internal_trigger *trigger;
+
+	trigger = widget_get_user_data(widget);
+	trigger->focused = 0;
+	widget_schedule_redraw(widget);
+	trigger->handler(trigger, input);
+}
+
 static void
 clock_func(struct task *task, uint32_t events)
 {
@@ -470,6 +611,7 @@ panel_resize_handler(struct widget *widget,
 		     int32_t width, int32_t height, void *data)
 {
 	struct panel_launcher *launcher;
+	struct panel_internal_trigger *trigger;
 	struct panel *panel = data;
 	int bx = width / 2;
 	int by = height / 2;
@@ -478,6 +620,22 @@ panel_resize_handler(struct widget *widget,
 	int y = spacing;
 	int w, h;
 	int horizontal = panel->panel_position == WESTON_DESKTOP_SHELL_PANEL_POSITION_TOP || panel->panel_position == WESTON_DESKTOP_SHELL_PANEL_POSITION_BOTTOM;
+
+	wl_list_for_each(trigger, &panel->trigger_list, link) {
+		w = cairo_image_surface_get_width(trigger->icon) + trigger->width;
+		h = cairo_image_surface_get_height(trigger->icon);
+
+		if (horizontal)
+			y = by - h / 2;
+		else
+			x = bx - w / 2;
+		widget_set_allocation(trigger->widget,
+				      x, y, w + 1, h + 1);
+		if (horizontal)
+			x += w + spacing;
+		else
+			y += h + spacing;
+	}
 
 	wl_list_for_each(launcher, &panel->launcher_list, link) {
 		w = cairo_image_surface_get_width(launcher->icon);
@@ -549,6 +707,17 @@ panel_configure(void *data,
 }
 
 static void
+panel_destroy_trigger(struct panel_internal_trigger *trigger)
+{
+	cairo_surface_destroy(trigger->icon);
+
+	widget_destroy(trigger->widget);
+	wl_list_remove(&trigger->link);
+
+	free(trigger);
+}
+
+static void
 panel_destroy_launcher(struct panel_launcher *launcher)
 {
 	wl_array_release(&launcher->argv);
@@ -569,9 +738,14 @@ panel_destroy(struct panel *panel)
 {
 	struct panel_launcher *tmp;
 	struct panel_launcher *launcher;
+	struct panel_internal_trigger *tmp_trigger;
+	struct panel_internal_trigger *trigger;
 
 	if (panel->clock)
 		panel_destroy_clock(panel->clock);
+
+	wl_list_for_each_safe(trigger, tmp_trigger, &panel->trigger_list, link)
+		panel_destroy_trigger(trigger);
 
 	wl_list_for_each_safe(launcher, tmp, &panel->launcher_list, link)
 		panel_destroy_launcher(launcher);
@@ -581,6 +755,14 @@ panel_destroy(struct panel *panel)
 
 	free(panel);
 }
+
+static void launch_exposay(struct panel_internal_trigger *trigger, struct input* input) {
+	struct wl_seat *seat = input_get_seat(input);
+	weston_desktop_shell_toggle_exposay(trigger->panel->desktop->shell, 1, seat);
+};
+
+static void
+panel_add_internal_trigger(struct panel *panel, const char *icon, char *toolip, char* text, const trigger_handler handler);
 
 static struct panel *
 panel_create(struct desktop *desktop)
@@ -594,7 +776,11 @@ panel_create(struct desktop *desktop)
 	panel->base.configure = panel_configure;
 	panel->window = window_create_custom(desktop->display);
 	panel->widget = window_add_widget(panel->window, panel);
+
+	panel->desktop = desktop;
+
 	wl_list_init(&panel->launcher_list);
+	wl_list_init(&panel->trigger_list);
 
 	window_set_title(panel->window, "panel");
 	window_set_user_data(panel->window, panel);
@@ -614,6 +800,11 @@ panel_create(struct desktop *desktop)
 					&panel->color, 0xaa000000);
 
 	panel_add_launchers(panel, desktop);
+	panel_add_internal_trigger(panel,
+	                          DATADIR "/weston/terminal.png",
+	                          "Launch Window Overview",
+	                          "Windows",
+	                          launch_exposay);
 
 	return panel;
 }
@@ -714,19 +905,65 @@ panel_add_launcher(struct panel *panel, const char *icon, const char *path)
 
 	launcher->widget = widget_add_widget(panel->widget, launcher);
 	widget_set_enter_handler(launcher->widget,
-				 panel_launcher_enter_handler);
+	                         panel_launcher_enter_handler);
 	widget_set_leave_handler(launcher->widget,
-				   panel_launcher_leave_handler);
+	                         panel_launcher_leave_handler);
 	widget_set_button_handler(launcher->widget,
-				    panel_launcher_button_handler);
+	                          panel_launcher_button_handler);
 	widget_set_touch_down_handler(launcher->widget,
-				      panel_launcher_touch_down_handler);
+	                              panel_launcher_touch_down_handler);
 	widget_set_touch_up_handler(launcher->widget,
-				    panel_launcher_touch_up_handler);
+	                            panel_launcher_touch_up_handler);
 	widget_set_redraw_handler(launcher->widget,
-				  panel_launcher_redraw_handler);
+	                          panel_launcher_redraw_handler);
 	widget_set_motion_handler(launcher->widget,
-				  panel_launcher_motion_handler);
+	                          panel_launcher_motion_handler);
+}
+
+static void
+panel_add_internal_trigger(struct panel *panel, const char *icon, char *toolip, char* text, const trigger_handler handler)
+{
+	struct panel_internal_trigger *trigger;
+
+	trigger = xzalloc(sizeof *trigger);
+	trigger->icon = load_icon_or_fallback(icon);
+	trigger->handler = handler;
+
+	trigger->panel = panel;
+
+	trigger->toolip = toolip;
+	trigger->text = text;
+
+	trigger->widget = widget_add_widget(panel->widget, trigger);
+	wl_list_insert(panel->trigger_list.prev, &trigger->link);
+
+	cairo_t* cr = cairo_create(trigger->icon);
+	cairo_text_extents_t extents;
+	cairo_font_extents_t font_extents;
+
+	cairo_select_font_face(cr, "sans",
+						 CAIRO_FONT_SLANT_NORMAL,
+						 CAIRO_FONT_WEIGHT_NORMAL);
+	cairo_set_font_size(cr, 14);
+	cairo_text_extents(cr, trigger->text, &extents);
+	cairo_font_extents(cr, &font_extents);
+
+	trigger->width = 5 + extents.width;
+
+	widget_set_enter_handler(trigger->widget,
+	                         panel_trigger_enter_handler);
+	widget_set_leave_handler(trigger->widget,
+	                         panel_trigger_leave_handler);
+	widget_set_button_handler(trigger->widget,
+	                          panel_trigger_button_handler);
+	widget_set_touch_down_handler(trigger->widget,
+	                              panel_trigger_touch_down_handler);
+	widget_set_touch_up_handler(trigger->widget,
+	                            panel_trigger_touch_up_handler);
+	widget_set_redraw_handler(trigger->widget,
+	                          panel_trigger_redraw_handler);
+	widget_set_motion_handler(trigger->widget,
+	                          panel_trigger_motion_handler);
 }
 
 enum {
