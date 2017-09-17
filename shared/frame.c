@@ -501,13 +501,15 @@ frame_refresh_geometry(struct frame *frame)
 		frame->shadow_margin = t->margin;
 	}
 
-	x_r = frame->width - t->width - frame->shadow_margin;
-	x_l = t->width + frame->shadow_margin;
+	x_r = frame->width - t->width - frame->shadow_margin - t->frame_radius;
+	x_l = t->width + frame->shadow_margin + t->frame_radius;
 	y = t->width + frame->shadow_margin;
 	wl_list_for_each(button, &frame->buttons, link) {
 		const int button_padding = 4;
 		w = cairo_image_surface_get_width(button->icon);
 		h = cairo_image_surface_get_height(button->icon);
+
+		int center_align_y = y + ((t->titlebar_height - h) >> 1);
 
 		if (button->flags & FRAME_BUTTON_DECORATED)
 			w += 10;
@@ -516,14 +518,14 @@ frame_refresh_geometry(struct frame *frame)
 			x_r -= w;
 
 			button->allocation.x = x_r;
-			button->allocation.y = y;
+			button->allocation.y = center_align_y;
 			button->allocation.width = w + 1;
 			button->allocation.height = h + 1;
 
 			x_r -= button_padding;
 		} else {
 			button->allocation.x = x_l;
-			button->allocation.y = y;
+			button->allocation.y = center_align_y;
 			button->allocation.width = w + 1;
 			button->allocation.height = h + 1;
 
