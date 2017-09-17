@@ -12,7 +12,7 @@ BUILT_SOURCES =
 
 AM_DISTCHECK_CONFIGURE_FLAGS = --disable-setuid-install
 
-EXTRA_DIST = weston.ini.in ivi-shell/weston.ini.in
+EXTRA_DIST = weston.ini.in
 
 weston.ini : $(srcdir)/weston.ini.in
 	$(AM_V_GEN)$(SED) \
@@ -21,25 +21,7 @@ weston.ini : $(srcdir)/weston.ini.in
 		-e 's|@libexecdir[@]|$(libexecdir)|g' \
 		$< > $@
 
-ivi-shell/weston.ini : $(srcdir)/ivi-shell/weston.ini.in
-	$(AM_V_GEN)$(MKDIR_P) $(dir $@) && $(SED) \
-		-e 's|@bindir[@]|$(bindir)|g' \
-		-e 's|@abs_top_builddir[@]|$(abs_top_builddir)|g' \
-		-e 's|@abs_top_srcdir[@]|$(abs_top_srcdir)|g' \
-		-e 's|@libexecdir[@]|$(libexecdir)|g' \
-		-e 's|@plugin_prefix[@]||g' \
-		$< > $@
-
-tests/weston-ivi.ini : $(srcdir)/ivi-shell/weston.ini.in
-	$(AM_V_GEN)$(MKDIR_P) $(dir $@) && $(SED) \
-		-e 's|@bindir[@]|$(bindir)|g' \
-		-e 's|@abs_top_builddir[@]|$(abs_top_builddir)|g' \
-		-e 's|@abs_top_srcdir[@]|$(abs_top_srcdir)|g' \
-		-e 's|@libexecdir[@]|$(abs_builddir)|g' \
-		-e 's|@plugin_prefix[@]|$(abs_top_builddir)/.libs/|g' \
-		$< > $@
-
-all-local : weston.ini ivi-shell/weston.ini
+all-local : weston.ini
 
 AM_CFLAGS = $(GCC_CFLAGS)
 
@@ -56,8 +38,6 @@ AM_CPPFLAGS = 					\
 	-DBINDIR='"$(bindir)"'
 
 CLEANFILES = weston.ini				\
-	ivi-shell/weston.ini			\
-	tests/weston-ivi.ini			\
 	internal-screenshot-00.png		\
 	$(BUILT_SOURCES)
 
@@ -301,11 +281,6 @@ libwestoninclude_HEADERS +=			\
 westonincludedir = $(includedir)/weston
 westoninclude_HEADERS = compositor/weston.h
 
-if ENABLE_IVI_SHELL
-westoninclude_HEADERS +=				\
-	ivi-shell/ivi-layout-export.h
-endif
-
 if ENABLE_EGL
 libweston_module_LTLIBRARIES += gl-renderer.la
 gl_renderer_la_LDFLAGS = -module -avoid-version
@@ -522,11 +497,6 @@ libexec_PROGRAMS +=				\
 	weston-keyboard				\
 	weston-simple-im
 
-if ENABLE_IVI_SHELL
-libexec_PROGRAMS +=				\
-	weston-ivi-shell-user-interface
-endif
-
 demo_clients =					\
 	weston-flower				\
 	weston-image				\
@@ -563,9 +533,7 @@ nodist_weston_simple_shm_SOURCES =		\
 	protocol/xdg-shell-unstable-v6-protocol.c		\
 	protocol/xdg-shell-unstable-v6-client-protocol.h	\
 	protocol/fullscreen-shell-unstable-v1-protocol.c	\
-	protocol/fullscreen-shell-unstable-v1-client-protocol.h	\
-	protocol/ivi-application-protocol.c		\
-	protocol/ivi-application-client-protocol.h
+	protocol/fullscreen-shell-unstable-v1-client-protocol.h
 weston_simple_shm_CFLAGS = $(AM_CFLAGS) $(SIMPLE_CLIENT_CFLAGS)
 weston_simple_shm_LDADD = $(SIMPLE_CLIENT_LIBS) libshared.la
 
@@ -605,9 +573,7 @@ demo_clients += weston-simple-egl
 weston_simple_egl_SOURCES = clients/simple-egl.c
 nodist_weston_simple_egl_SOURCES =		\
 	protocol/xdg-shell-unstable-v6-protocol.c		\
-	protocol/xdg-shell-unstable-v6-client-protocol.h	\
-	protocol/ivi-application-protocol.c		\
-	protocol/ivi-application-client-protocol.h
+	protocol/xdg-shell-unstable-v6-client-protocol.h
 weston_simple_egl_CFLAGS = $(AM_CFLAGS) $(SIMPLE_EGL_CLIENT_CFLAGS)
 weston_simple_egl_LDADD = $(SIMPLE_EGL_CLIENT_LIBS) -lm
 endif
@@ -656,8 +622,6 @@ nodist_libtoytoolkit_la_SOURCES =			\
 	protocol/viewporter-client-protocol.h		\
 	protocol/xdg-shell-unstable-v6-protocol.c			\
 	protocol/xdg-shell-unstable-v6-client-protocol.h		\
-	protocol/ivi-application-protocol.c		\
-	protocol/ivi-application-client-protocol.h	\
 	protocol/pointer-constraints-unstable-v1-protocol.c		\
 	protocol/pointer-constraints-unstable-v1-client-protocol.h	\
 	protocol/relative-pointer-unstable-v1-protocol.c		\
@@ -834,19 +798,6 @@ nodist_weston_desktop_shell_SOURCES =			\
 weston_desktop_shell_LDADD = libtoytoolkit.la
 weston_desktop_shell_CFLAGS = $(AM_CFLAGS) $(CLIENT_CFLAGS)
 
-if ENABLE_IVI_SHELL
-weston_ivi_shell_user_interface_SOURCES = 				\
-	clients/ivi-shell-user-interface.c				\
-	shared/helpers.h
-nodist_weston_ivi_shell_user_interface_SOURCES =			\
-	protocol/ivi-hmi-controller-client-protocol.h			\
-	protocol/ivi-hmi-controller-protocol.c				\
-	protocol/ivi-application-client-protocol.h			\
-        protocol/ivi-application-protocol.c
-weston_ivi_shell_user_interface_LDADD = libtoytoolkit.la
-weston_ivi_shell_user_interface_CFLAGS = $(AM_CFLAGS) $(CLIENT_CFLAGS)
-endif
-
 if BUILD_FULL_GL_CLIENTS
 demo_clients += weston-gears
 weston_gears_SOURCES = clients/gears.c
@@ -874,11 +825,7 @@ BUILT_SOURCES +=					\
 	protocol/fullscreen-shell-unstable-v1-protocol.c		\
 	protocol/fullscreen-shell-unstable-v1-client-protocol.h	\
 	protocol/xdg-shell-unstable-v6-protocol.c			\
-	protocol/xdg-shell-unstable-v6-client-protocol.h		\
-	protocol/ivi-hmi-controller-protocol.c		\
-	protocol/ivi-hmi-controller-client-protocol.h	\
-	protocol/ivi-application-protocol.c		\
-	protocol/ivi-application-client-protocol.h
+	protocol/xdg-shell-unstable-v6-client-protocol.h
 
 westondatadir = $(datadir)/weston
 dist_westondata_DATA =				\
@@ -894,23 +841,6 @@ dist_westondata_DATA =				\
 	data/sign_close.png			\
 	data/sign_maximize.png			\
 	data/sign_minimize.png
-
-if ENABLE_IVI_SHELL
-dist_westondata_DATA +=				\
-	data/background.png                     \
-	data/tiling.png                         \
-	data/fullscreen.png                     \
-	data/panel.png                          \
-	data/random.png                         \
-	data/sidebyside.png                     \
-	data/home.png                           \
-	data/icon_ivi_clickdot.png              \
-	data/icon_ivi_flower.png                \
-	data/icon_ivi_simple-egl.png            \
-	data/icon_ivi_simple-shm.png            \
-	data/icon_ivi_smoke.png
-endif
-
 
 if BUILD_WCAP_TOOLS
 bin_PROGRAMS += wcap-decode
@@ -981,55 +911,6 @@ nodist_fullscreen_shell_la_SOURCES =			\
 
 BUILT_SOURCES += $(nodist_fullscreen_shell_la_SOURCES)
 endif
-
-if ENABLE_IVI_SHELL
-
-module_LTLIBRARIES +=				\
-	$(ivi_shell)				\
-	$(hmi_controller)
-
-ivi_shell = ivi-shell.la
-ivi_shell_la_LDFLAGS = -module -avoid-version
-ivi_shell_la_LIBADD =				\
-	libshared.la				\
-	libweston-@LIBWESTON_MAJOR@.la		\
-	$(COMPOSITOR_LIBS)
-ivi_shell_la_CFLAGS = $(AM_CFLAGS) $(COMPOSITOR_CFLAGS)
-ivi_shell_la_SOURCES =				\
-	ivi-shell/ivi-layout-export.h		\
-	ivi-shell/ivi-layout-private.h		\
-	ivi-shell/ivi-layout-shell.h		\
-	ivi-shell/ivi-layout.c			\
-	ivi-shell/ivi-layout-transition.c	\
-	ivi-shell/ivi-shell.h			\
-	ivi-shell/ivi-shell.c			\
-	ivi-shell/input-panel-ivi.c		\
-	shared/helpers.h
-nodist_ivi_shell_la_SOURCES =			\
-	protocol/ivi-application-protocol.c		\
-	protocol/ivi-application-server-protocol.h
-
-BUILT_SOURCES += $(nodist_ivi_shell_la_SOURCES)
-
-hmi_controller = hmi-controller.la
-hmi_controller_la_LDFLAGS = -module -avoid-version
-hmi_controller_la_LIBADD =			\
-	libshared.la				\
-	libweston-@LIBWESTON_MAJOR@.la		\
-	$(COMPOSITOR_LIBS)
-hmi_controller_la_CFLAGS = $(AM_CFLAGS) $(COMPOSITOR_CFLAGS)
-hmi_controller_la_SOURCES =				\
-	ivi-shell/ivi-layout-export.h			\
-	ivi-shell/hmi-controller.c			\
-	shared/helpers.h
-nodist_hmi_controller_la_SOURCES =			\
-	protocol/ivi-hmi-controller-protocol.c		\
-	protocol/ivi-hmi-controller-server-protocol.h
-
-BUILT_SOURCES += $(nodist_hmi_controller_la_SOURCES)
-
-endif
-
 
 if ENABLE_SCREEN_SHARING
 
@@ -1187,7 +1068,7 @@ libzunitcmain_la_LIBADD =	\
 # tests subdirectory
 #
 
-TESTS = $(internal_tests) $(shared_tests) $(module_tests) $(weston_tests) $(ivi_tests)
+TESTS = $(internal_tests) $(shared_tests) $(module_tests) $(weston_tests)
 
 internal_tests = 				\
 	internal-screenshot.weston
@@ -1216,10 +1097,6 @@ weston_tests =					\
 	subsurface-shot.weston			\
 	devices.weston
 
-ivi_tests =
-
-$(ivi_tests) : $(builddir)/tests/weston-ivi.ini
-
 AM_TESTS_ENVIRONMENT = \
 	abs_builddir='$(abs_builddir)'; export abs_builddir; \
 	abs_top_srcdir='$(abs_top_srcdir)'; export abs_top_srcdir;
@@ -1247,7 +1124,6 @@ noinst_PROGRAMS +=			\
 	$(internal_tests)		\
 	$(shared_tests)			\
 	$(weston_tests)			\
-	$(ivi_tests)			\
 	matrix-test
 
 test_module_ldflags = -module -avoid-version -rpath $(libdir)
@@ -1415,57 +1291,12 @@ matrix_test_SOURCES =				\
 matrix_test_CPPFLAGS = -DUNIT_TEST
 matrix_test_LDADD = -lm $(CLOCK_GETTIME_LIBS)
 
-if ENABLE_IVI_SHELL
-module_tests += 				\
-	ivi-layout-internal-test.la		\
-	ivi-layout-test.la
-
-ivi_layout_internal_test_la_LIBADD = $(test_module_libadd)
-ivi_layout_internal_test_la_LDFLAGS = $(test_module_ldflags)
-ivi_layout_internal_test_la_CFLAGS = $(AM_CFLAGS) $(COMPOSITOR_CFLAGS)
-ivi_layout_internal_test_la_SOURCES =			\
-	tests/ivi_layout-internal-test.c
-
-ivi_layout_test_la_LIBADD = $(test_module_libadd)
-ivi_layout_test_la_LDFLAGS = $(test_module_ldflags)
-ivi_layout_test_la_CFLAGS = $(AM_CFLAGS) $(COMPOSITOR_CFLAGS)
-ivi_layout_test_la_SOURCES =			\
-	tests/ivi_layout-test-plugin.c		\
-	tests/ivi-test.h			\
-	shared/helpers.h
-nodist_ivi_layout_test_la_SOURCES =		\
-	protocol/weston-test-protocol.c		\
-	protocol/weston-test-server-protocol.h
-
-ivi_tests +=					\
-	ivi-shell-app.weston
-
-ivi_shell_app_weston_SOURCES = tests/ivi-shell-app-test.c
-nodist_ivi_shell_app_weston_SOURCES =		\
-	protocol/ivi-application-protocol.c	\
-	protocol/ivi-application-client-protocol.h
-ivi_shell_app_weston_CFLAGS = $(AM_CFLAGS) $(TEST_CLIENT_CFLAGS)
-ivi_shell_app_weston_LDADD = libtest-client.la
-
-noinst_PROGRAMS += ivi-layout.ivi
-
-ivi_layout_ivi_SOURCES =			\
-	tests/ivi_layout-test.c 		\
-	tests/ivi-test.h			\
-	shared/helpers.h
-nodist_ivi_layout_ivi_SOURCES = 		\
-	protocol/ivi-application-protocol.c	\
-	protocol/ivi-application-client-protocol.h
-ivi_layout_ivi_CFLAGS = $(AM_CFLAGS) $(TEST_CLIENT_CFLAGS)
-ivi_layout_ivi_LDADD = libtest-client.la
-endif
-
 if BUILD_SETBACKLIGHT
 noinst_PROGRAMS += setbacklight
-setbacklight_SOURCES =				\
-	tests/setbacklight.c			\
-	libweston/libbacklight.c		\
-	libweston/libbacklight.h
+setbacklight_SOURCES =                         \
+       tests/setbacklight.c                    \
+       libweston/libbacklight.c                \
+       libweston/libbacklight.h
 setbacklight_CFLAGS = $(AM_CFLAGS) $(SETBACKLIGHT_CFLAGS)
 setbacklight_LDADD = $(SETBACKLIGHT_LIBS)
 endif
@@ -1508,9 +1339,7 @@ EXTRA_DIST +=					\
 	protocol/weston-desktop-shell.xml	\
 	protocol/weston-screenshooter.xml	\
 	protocol/text-cursor-position.xml	\
-	protocol/weston-test.xml		\
-	protocol/ivi-application.xml		\
-	protocol/ivi-hmi-controller.xml
+	protocol/weston-test.xml
 
 #
 # manual test modules in tests subdirectory

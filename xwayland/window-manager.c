@@ -953,17 +953,17 @@ weston_wm_window_create_frame(struct weston_wm_window *window)
 
 	window->frame_id = xcb_generate_id(wm->conn);
 	xcb_create_window(wm->conn,
-			  32,
-			  window->frame_id,
-			  wm->screen->root,
-			  0, 0,
-			  width, height,
-			  0,
-			  XCB_WINDOW_CLASS_INPUT_OUTPUT,
-			  wm->visual_id,
-			  XCB_CW_BORDER_PIXEL |
-			  XCB_CW_EVENT_MASK |
-			  XCB_CW_COLORMAP, values);
+	                  32,
+	                  window->frame_id,
+	                  wm->screen->root,
+	                  0, 0,
+	                  width, height,
+	                  0,
+	                  XCB_WINDOW_CLASS_INPUT_OUTPUT,
+	                  wm->visual_id,
+	                  XCB_CW_BORDER_PIXEL |
+	                  XCB_CW_EVENT_MASK |
+	                  XCB_CW_COLORMAP, values);
 
 	xcb_reparent_window(wm->conn, window->id, window->frame_id, x, y);
 
@@ -1150,7 +1150,7 @@ weston_wm_window_draw_decoration(struct weston_wm_window *window)
 		cairo_paint(cr);
 
 		render_shadow(cr, window->wm->theme->shadow,
-			      2, 2, width + 8, height + 8, 64, 64);
+		              -4, -4, width + 8, height + 8, 64, 64);
 	}
 
 	cairo_destroy(cr);
@@ -1267,7 +1267,7 @@ weston_wm_window_schedule_repaint(struct weston_wm_window *window)
 
 	window->repaint_source =
 		wl_event_loop_add_idle(wm->server->loop,
-				       weston_wm_window_do_repaint, window);
+		                       weston_wm_window_do_repaint, window);
 }
 
 static void

@@ -562,13 +562,6 @@ if test "x$enable_junit_xml" != "xno"; then
 fi
 AM_CONDITIONAL(ENABLE_JUNIT_XML, test "x$enable_junit_xml" = "xyes")
 
-# ivi-shell support
-AC_ARG_ENABLE(ivi-shell,
-              AS_HELP_STRING([--disable-ivi-shell],
-                             [do not build ivi-shell server plugin and client]),,
-	      enable_ivi_shell=yes)
-AM_CONDITIONAL(ENABLE_IVI_SHELL, test "x$enable_ivi_shell" = "xyes")
-
 AC_ARG_ENABLE(wcap-tools, [  --disable-wcap-tools],, enable_wcap_tools=yes)
 AM_CONDITIONAL(BUILD_WCAP_TOOLS, test x$enable_wcap_tools = xyes)
 if test x$enable_wcap_tools = xyes; then
@@ -691,8 +684,6 @@ AC_MSG_RESULT([
 	xcb_xkb				${have_xcb_xkb}
 	XWayland			${enable_xwayland}
 	dbus				${enable_dbus}
-
-	ivi-shell			${enable_ivi_shell}
 
 	Build wcap utility		${enable_wcap_tools}
 	Build Fullscreen Shell		${enable_fullscreen_shell}
