@@ -232,7 +232,8 @@ exposay_layout(struct desktop_shell *shell, struct shell_output *shell_output)
 	}
 
 	if (eoutput->num_surfaces == 0) {
-		eoutput->grid_size = 0;
+		eoutput->grid_width = 0;
+		eoutput->grid_height = 0;
 		eoutput->hpadding_outer = 0;
 		eoutput->vpadding_outer = 0;
 		eoutput->padding_inner = 0;
@@ -252,22 +253,29 @@ exposay_layout(struct desktop_shell *shell, struct shell_output *shell_output)
 	 * XXX: Surely there has to be a better way to express this maths,
 	 *      right?!
 	 */
-	eoutput->grid_size = floor(sqrtf(eoutput->num_surfaces));
-	if (pow(eoutput->grid_size, 2) != eoutput->num_surfaces)
-		eoutput->grid_size++;
-	last_row_removed = pow(eoutput->grid_size, 2) - eoutput->num_surfaces;
+	float aspect_ratio = (float)output->height / (float)output->width;
+	eoutput->grid_width = round(sqrtf((float)eoutput->num_surfaces / aspect_ratio));
+	eoutput->grid_height = round(aspect_ratio * (float)eoutput->grid_width);
+	while (eoutput->grid_width * eoutput->grid_height < eoutput->num_surfaces) {
+		if (output->height > output->width)
+			eoutput->grid_height++;
+		else
+			eoutput->grid_width++;
+	}
+
+	last_row_removed = (eoutput->grid_width * eoutput->grid_height) - eoutput->num_surfaces;
 
 	eoutput->hpadding_outer = (output->width / 10);
 	eoutput->vpadding_outer = (output->height / 10);
-	eoutput->padding_inner = 80;
+	eoutput->padding_inner = 10;
 
 	w = output->width - (eoutput->hpadding_outer * 2);
-	w -= eoutput->padding_inner * (eoutput->grid_size - 1);
-	w /= eoutput->grid_size;
+	w -= eoutput->padding_inner * (eoutput->grid_width - 1);
+	w /= eoutput->grid_width;
 
 	h = output->height - (eoutput->vpadding_outer * 2);
-	h -= eoutput->padding_inner * (eoutput->grid_size - 1);
-	h /= eoutput->grid_size;
+	h -= eoutput->padding_inner * (eoutput->grid_height - 1);
+	h /= eoutput->grid_height;
 
 	eoutput->surface_size = (w < h) ? w : h;
 	if (eoutput->surface_size > (output->width / 2))
@@ -298,15 +306,15 @@ exposay_layout(struct desktop_shell *shell, struct shell_output *shell_output)
 		esurface->eoutput = eoutput;
 		esurface->view = view;
 
-		esurface->row = i / eoutput->grid_size;
-		esurface->column = i % eoutput->grid_size;
+		esurface->row = i / eoutput->grid_width;
+		esurface->column = i % eoutput->grid_width;
 
 		esurface->x = output->x + eoutput->hpadding_outer;
 		esurface->x += pad * esurface->column;
 		esurface->y = output->y + eoutput->vpadding_outer;
 		esurface->y += pad * esurface->row;
 
-		if (esurface->row == eoutput->grid_size - 1)
+		if (esurface->row == eoutput->grid_height - 1)
 			esurface->x += (eoutput->surface_size + eoutput->padding_inner) * last_row_removed / 2;
 
 		if (view->surface->width > view->surface->height)
@@ -467,10 +475,10 @@ exposay_key(struct weston_keyboard_grab *grab, uint32_t time, uint32_t key,
 		 * has fewer items than all the others. */
 		if (!exposay_maybe_move(shell, shell->exposay.row_current + 1,
 		                        shell->exposay.column_current) &&
-		    shell->exposay.row_current < (shell->exposay.cur_output->grid_size - 1)) {
+		    shell->exposay.row_current < (shell->exposay.cur_output->grid_height - 1)) {
 			exposay_maybe_move(shell, shell->exposay.row_current + 1,
 					   (shell->exposay.cur_output->num_surfaces %
-					    shell->exposay.cur_output->grid_size) - 1);
+					    shell->exposay.cur_output->grid_width) - 1);
 		}
 		break;
 	case KEY_LEFT:

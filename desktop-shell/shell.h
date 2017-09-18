@@ -60,7 +60,8 @@ enum exposay_layout_state {
 
 struct exposay_output {
 	int num_surfaces;
-	int grid_size;
+	int grid_height;
+	int grid_width;
 	int surface_size;
 
 	int hpadding_outer;
