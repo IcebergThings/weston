@@ -241,23 +241,14 @@ exposay_layout(struct desktop_shell *shell, struct shell_output *shell_output)
 		return EXPOSAY_LAYOUT_OVERVIEW;
 	}
 
-	/* Lay the grid out as square as possible, losing surfaces from the
-	 * bottom row if required.  Start with fixed padding of a 10% margin
-	 * around the outside and 80px internal padding between surfaces, and
-	 * maximise the area made available to surfaces after this, but only
-	 * to a maximum of 1/3rd the total output size.
-	 *
-	 * If we can't make a square grid, add one extra row at the bottom
-	 * which will have a smaller number of columns.
-	 *
-	 * XXX: Surely there has to be a better way to express this maths,
-	 *      right?!
-	 */
+	/* Lay the grid according to aspect ratio and try to maximize the space */
 	float aspect_ratio = (float)output->height / (float)output->width;
-	eoutput->grid_width = round(sqrtf((float)eoutput->num_surfaces / aspect_ratio));
-	eoutput->grid_height = round(aspect_ratio * (float)eoutput->grid_width);
+	eoutput->grid_width = floor(sqrtf((float)eoutput->num_surfaces / aspect_ratio));
+	eoutput->grid_height = ceil(aspect_ratio * (float)eoutput->grid_width);
+	if (eoutput->grid_width == 0) eoutput->grid_width++;
+	if (eoutput->grid_height == 0) eoutput->grid_height++;
 	while (eoutput->grid_width * eoutput->grid_height < eoutput->num_surfaces) {
-		if (output->height > output->width)
+		if (eoutput->grid_height > eoutput->grid_width)
 			eoutput->grid_height++;
 		else
 			eoutput->grid_width++;
@@ -265,8 +256,8 @@ exposay_layout(struct desktop_shell *shell, struct shell_output *shell_output)
 
 	last_row_removed = (eoutput->grid_width * eoutput->grid_height) - eoutput->num_surfaces;
 
-	eoutput->hpadding_outer = (output->width / 10);
-	eoutput->vpadding_outer = (output->height / 10);
+	eoutput->hpadding_outer = (output->width / 20);
+	eoutput->vpadding_outer = (output->height / 20);
 	eoutput->padding_inner = 10;
 
 	w = output->width - (eoutput->hpadding_outer * 2);
@@ -283,11 +274,15 @@ exposay_layout(struct desktop_shell *shell, struct shell_output *shell_output)
 	if (eoutput->surface_size > (output->height / 2))
 		eoutput->surface_size = output->height / 2;
 
+	eoutput->hpadding_outer += ((output->width - eoutput->hpadding_outer * 2.0) - eoutput->surface_size * eoutput->grid_width - eoutput->padding_inner * (eoutput->grid_width - 1)) / 2;
+	eoutput->vpadding_outer += ((output->height - eoutput->vpadding_outer * 2.0) - h * eoutput->grid_height - eoutput->padding_inner * (eoutput->grid_height - 1)) / 2;
+
 	i = 0;
 	wl_list_for_each(view, &workspace->layer.view_list.link, layer_link.link) {
-		int pad;
+		int xpad, ypad;
 
-		pad = eoutput->surface_size + eoutput->padding_inner;
+		xpad = eoutput->surface_size + eoutput->padding_inner;
+		ypad = h + eoutput->padding_inner;
 
 		if (!get_shell_surface(view->surface))
 			continue;
@@ -310,9 +305,9 @@ exposay_layout(struct desktop_shell *shell, struct shell_output *shell_output)
 		esurface->column = i % eoutput->grid_width;
 
 		esurface->x = output->x + eoutput->hpadding_outer;
-		esurface->x += pad * esurface->column;
+		esurface->x += xpad * esurface->column;
 		esurface->y = output->y + eoutput->vpadding_outer;
-		esurface->y += pad * esurface->row;
+		esurface->y += ypad * esurface->row;
 
 		if (esurface->row == eoutput->grid_height - 1)
 			esurface->x += (eoutput->surface_size + eoutput->padding_inner) * last_row_removed / 2;
@@ -323,6 +318,8 @@ exposay_layout(struct desktop_shell *shell, struct shell_output *shell_output)
 			esurface->scale = eoutput->surface_size / (float) view->surface->height;
 		esurface->width = view->surface->width * esurface->scale;
 		esurface->height = view->surface->height * esurface->scale;
+
+		esurface->y += (h - esurface->height) / 2;
 
 		if (shell->exposay.focus_current == esurface->view)
 			highlight = esurface;
