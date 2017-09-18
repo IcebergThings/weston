@@ -1555,9 +1555,34 @@ weston_wm_window_set_toplevel(struct weston_wm_window *window)
 	const struct weston_desktop_xwayland_interface *xwayland_interface =
 		window->wm->server->compositor->xwayland_interface;
 
-	xwayland_interface->set_toplevel(window->shsurf);
+	if (window->saved_width == 0)
+		window->saved_width = window->width;
+
+	if (window->saved_height == 0)
+		window->saved_height = window->height;
+
 	window->width = window->saved_width;
 	window->height = window->saved_height;
+
+	xwayland_interface->set_toplevel(window->shsurf);
+	if (window->frame)
+		frame_resize_inside(window->frame,
+					window->width,
+					window->height);
+	weston_wm_window_configure(window);
+}
+
+static void
+weston_wm_window_set_maximized(struct weston_wm_window *window)
+{
+	const struct weston_desktop_xwayland_interface *xwayland_interface =
+		window->wm->server->compositor->xwayland_interface;
+
+	window->saved_width = window->width;
+	window->saved_height = window->height;
+
+	xwayland_interface->set_maximized(window->shsurf);
+
 	if (window->frame)
 		frame_resize_inside(window->frame,
 					window->width,
@@ -1606,14 +1631,10 @@ weston_wm_window_handle_state(struct weston_wm_window *window,
 		    update_state(action, &window->maximized_horz))
 			weston_wm_window_set_net_wm_state(window);
 
-		if (maximized != weston_wm_window_is_maximized(window)) {
+		if (maximized != weston_wm_window_is_maximized(window) && window->shsurf) {
 			if (weston_wm_window_is_maximized(window)) {
-				window->saved_width = window->width;
-				window->saved_height = window->height;
-
-				if (window->shsurf)
-					xwayland_interface->set_maximized(window->shsurf);
-			} else if (window->shsurf) {
+				weston_wm_window_set_maximized(window);
+			} else {
 				weston_wm_window_set_toplevel(window);
 			}
 		}
@@ -1950,12 +1971,12 @@ weston_wm_handle_button(struct weston_wm *wm, xcb_generic_event_t *event)
 		window->maximized_horz = !window->maximized_horz;
 		window->maximized_vert = !window->maximized_vert;
 		if (weston_wm_window_is_maximized(window)) {
-			window->saved_width = window->width;
-			window->saved_height = window->height;
-			xwayland_interface->set_maximized(window->shsurf);
+			weston_wm_window_set_maximized(window);
 		} else {
 			weston_wm_window_set_toplevel(window);
 		}
+		weston_wm_window_set_net_wm_state(window);
+
 		frame_status_clear(window->frame, FRAME_STATUS_MAXIMIZE);
 	}
 }
@@ -2728,7 +2749,7 @@ xserver_map_shell_surface(struct weston_wm_window *window,
 						       parent->surface);
 		}
 	} else if (weston_wm_window_is_maximized(window)) {
-		xwayland_interface->set_maximized(window->shsurf);
+		weston_wm_window_set_maximized(window);
 	} else {
 		if (weston_wm_window_type_inactive(window)) {
 			xwayland_interface->set_xwayland(window->shsurf,
