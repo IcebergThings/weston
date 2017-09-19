@@ -574,6 +574,7 @@ weston_wm_window_read_properties(struct weston_wm_window *window)
 				else
 					window->decorate =
 						window->motif_hints.decorations;
+				weston_wm_window_schedule_repaint(window);
 			}
 			break;
 		default:
@@ -1386,9 +1387,12 @@ weston_wm_handle_create_notify(struct weston_wm *wm, xcb_generic_event_t *event)
 	if (our_resource(wm, create_notify->window))
 		return;
 
+	xcb_get_geometry_cookie_t parent_geometry_cookie = xcb_get_geometry(wm->conn, create_notify->parent);
+	xcb_get_geometry_reply_t* parent = xcb_get_geometry_reply(wm->conn, parent_geometry_cookie, NULL);
+
 	weston_wm_window_create(wm, create_notify->window,
 				create_notify->width, create_notify->height,
-				create_notify->x, create_notify->y,
+				parent->x + create_notify->x, parent->y + create_notify->y,
 				create_notify->override_redirect);
 }
 
