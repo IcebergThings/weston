@@ -838,18 +838,8 @@ weston_wm_send_focus_window(struct weston_wm *wm,
 }
 
 static void
-weston_wm_window_activate(struct wl_listener *listener, void *data)
+westom_wm_window_set_activate(struct weston_wm *wm, struct weston_wm_window *window)
 {
-	struct weston_surface_activation_data *activation_data = data;
-	struct weston_surface *surface = activation_data->surface;
-	struct weston_wm_window *window = NULL;
-	struct weston_wm *wm =
-		container_of(listener, struct weston_wm, activate_listener);
-
-	if (surface) {
-		window = get_wm_window(surface);
-	}
-
 	if (window) {
 		weston_wm_set_net_active_window(wm, window->id);
 	} else {
@@ -871,6 +861,22 @@ weston_wm_window_activate(struct wl_listener *listener, void *data)
 	}
 
 	xcb_flush(wm->conn);
+}
+
+static void
+weston_wm_window_activate(struct wl_listener *listener, void *data)
+{
+	struct weston_surface_activation_data *activation_data = data;
+	struct weston_surface *surface = activation_data->surface;
+	struct weston_wm_window *window = NULL;
+	struct weston_wm *wm =
+		container_of(listener, struct weston_wm, activate_listener);
+
+	if (surface) {
+		window = get_wm_window(surface);
+	}
+
+	westom_wm_window_set_activate(wm, window);
 
 }
 
