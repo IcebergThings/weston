@@ -1,0 +1,35 @@
+if get_option('shell-rdprail')
+	dep_winpr = dependency('winpr2', version: '>= 2.0.0', required: false)
+	if dep_winpr.found()
+		config_h.set('HAVE_WINPR2', '1')
+	endif
+	srcs_shell_rdprail = [
+		'shell.c',
+		'input-panel.c',
+		'app-list.c',
+		weston_desktop_shell_server_protocol_h,
+		weston_desktop_shell_protocol_c,
+		input_method_unstable_v1_server_protocol_h,
+		input_method_unstable_v1_protocol_c,
+	]
+	deps_shell_rdprail = [
+		dep_libm,
+		dep_libexec_weston,
+		dep_libshared,
+		dep_lib_desktop,
+		dep_libweston_public,
+		dep_winpr,
+	]
+	plugin_shell_rdprail = shared_library(
+		'rdprail-shell',
+		srcs_shell_rdprail,
+		link_with: lib_cairo_shared,
+		include_directories: common_inc,
+		dependencies: deps_shell_rdprail,
+		name_prefix: '',
+		install: true,
+		install_dir: dir_module_weston,
+		install_rpath: '$ORIGIN'
+	)
+	env_modmap += 'rdprail-shell.so=@0@;'.format(plugin_shell_rdprail.full_path())
+endif

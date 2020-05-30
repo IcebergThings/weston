@@ -393,7 +393,7 @@ struct weston_config *
 weston_config_parse(const char *name)
 {
 	FILE *fp;
-	char line[512], *p;
+	char line[4096], *p;
 	struct stat filestat;
 	struct weston_config *config;
 	struct weston_config_section *section = NULL;

@@ -225,7 +225,7 @@ weston_desktop_api_fullscreen_requested(struct weston_desktop *desktop,
 						  desktop->user_data);
 }
 
-void
+WL_EXPORT void
 weston_desktop_api_maximized_requested(struct weston_desktop *desktop,
 				       struct weston_desktop_surface *surface,
 				       bool maximized)
@@ -241,6 +241,16 @@ weston_desktop_api_minimized_requested(struct weston_desktop *desktop,
 {
 	if (desktop->api.minimized_requested != NULL)
 		desktop->api.minimized_requested(surface, desktop->user_data);
+}
+
+void
+weston_desktop_api_set_window_icon(struct weston_desktop *desktop,
+				   struct weston_desktop_surface *surface,
+				   int32_t width, int32_t height, int32_t bpp, void *bits)
+{
+	if (desktop->api.set_window_icon != NULL)
+		desktop->api.set_window_icon(surface, width, height, bpp, bits,
+					     desktop->user_data);
 }
 
 void

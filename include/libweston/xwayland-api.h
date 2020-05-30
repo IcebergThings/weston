@@ -150,6 +150,33 @@ struct weston_xwayland_surface_api {
 	 */
 	void
 	(*send_position)(struct weston_surface *surface, int32_t x, int32_t y);
+	/** Notify the Xwayland surface maximized state has changed.
+	 *
+	 * \param surface The Xwayland surface.
+	 * \param is_maximized New maximized state for the surface.
+	 */
+	void
+	(*set_maximized)(struct weston_surface *surface, bool is_maximized);
+	/** Obtain X window class name associated to the surface.
+	 *
+	 * \param surface The Xwayland surface.
+	 */
+	char *
+	(*get_class_name)(struct weston_surface *surface);
+	/** Trigger callback to weston_desktop_api.set_window_icon with icon image from X.
+	 *
+	 * \param surface The Xwayland surface.
+	 */
+	bool
+	(*trigger_set_window_icon)(struct weston_surface *surface);
+	/** Send request to app to close the window.
+	 *  (application may react to the request and it may ignore
+	 *   or may prompt an confirmation UI, such as "Save" dialog).
+	 *
+	 * \param surface The Xwayland surface.
+	 */
+	void
+	(*close_window)(struct weston_surface *surface);
 };
 
 /** Retrieve the API object for the libweston Xwayland surface.

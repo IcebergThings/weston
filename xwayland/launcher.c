@@ -56,7 +56,9 @@ weston_xserver_handle_event(int listen_fd, uint32_t mask, void *data)
 	}
 
 	weston_log("Spawned Xwayland server, pid %d\n", wxs->pid);
-	wl_event_source_remove(wxs->abstract_source);
+	if (wxs->abstract_source) {
+		wl_event_source_remove(wxs->abstract_source);
+	}
 	wl_event_source_remove(wxs->unix_source);
 
 	return 1;
@@ -72,10 +74,14 @@ weston_xserver_shutdown(struct weston_xserver *wxs)
 	snprintf(path, sizeof path, "/tmp/.X11-unix/X%d", wxs->display);
 	unlink(path);
 	if (wxs->pid == 0) {
-		wl_event_source_remove(wxs->abstract_source);
+		if (wxs->abstract_source) {
+			wl_event_source_remove(wxs->abstract_source);
+		}
 		wl_event_source_remove(wxs->unix_source);
 	}
-	close(wxs->abstract_fd);
+	if (wxs->abstract_fd) {
+		close(wxs->abstract_fd);
+	}
 	close(wxs->unix_fd);
 	if (wxs->wm) {
 		weston_wm_destroy(wxs->wm);
@@ -260,6 +266,8 @@ weston_xwayland_listen(struct weston_xwayland *xwayland, void *user_data,
 	wxs->user_data = user_data;
 	wxs->spawn_func = spawn_func;
 
+	bool disable_abstract_fd = getenv("WESTON_DISABLE_ABSTRACT_FD") ? true : false;
+
 retry:
 	if (create_lockfile(wxs->display, lockfile, sizeof lockfile) < 0) {
 		if (errno == EAGAIN) {
@@ -273,17 +281,23 @@ retry:
 		}
 	}
 
-	wxs->abstract_fd = bind_to_abstract_socket(wxs->display);
-	if (wxs->abstract_fd < 0 && errno == EADDRINUSE) {
-		wxs->display++;
-		unlink(lockfile);
-		goto retry;
+	if (!disable_abstract_fd) {
+		wxs->abstract_fd = bind_to_abstract_socket(wxs->display);
+		if (wxs->abstract_fd < 0 && errno == EADDRINUSE) {
+			wxs->display++;
+			unlink(lockfile);
+			goto retry;
+		}
+	} else {
+		weston_log("Not using abstract fd for Xwayland\n");
 	}
 
 	wxs->unix_fd = bind_to_unix_socket(wxs->display);
 	if (wxs->unix_fd < 0) {
 		unlink(lockfile);
-		close(wxs->abstract_fd);
+		if (wxs->abstract_fd) {
+			close(wxs->abstract_fd);
+		}
 		free(wxs);
 		return -1;
 	}
@@ -293,10 +307,12 @@ retry:
 	setenv("DISPLAY", display_name, 1);
 
 	wxs->loop = wl_display_get_event_loop(wxs->wl_display);
-	wxs->abstract_source =
-		wl_event_loop_add_fd(wxs->loop, wxs->abstract_fd,
-				     WL_EVENT_READABLE,
-				     weston_xserver_handle_event, wxs);
+	if (wxs->abstract_fd) {
+		wxs->abstract_source =
+			wl_event_loop_add_fd(wxs->loop, wxs->abstract_fd,
+						WL_EVENT_READABLE,
+						weston_xserver_handle_event, wxs);
+	}
 	wxs->unix_source =
 		wl_event_loop_add_fd(wxs->loop, wxs->unix_fd,
 				     WL_EVENT_READABLE,
@@ -323,10 +339,12 @@ weston_xwayland_xserver_exited(struct weston_xwayland *xwayland,
 	wxs->pid = 0;
 	wxs->client = NULL;
 
-	wxs->abstract_source =
-		wl_event_loop_add_fd(wxs->loop, wxs->abstract_fd,
-				     WL_EVENT_READABLE,
-				     weston_xserver_handle_event, wxs);
+	if (wxs->abstract_fd) {
+		wxs->abstract_source =
+			wl_event_loop_add_fd(wxs->loop, wxs->abstract_fd,
+						WL_EVENT_READABLE,
+						weston_xserver_handle_event, wxs);
+	}
 	wxs->unix_source =
 		wl_event_loop_add_fd(wxs->loop, wxs->unix_fd,
 				     WL_EVENT_READABLE,

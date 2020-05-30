@@ -53,7 +53,7 @@ option(
 option(
 	'backend-default',
 	type: 'combo',
-	choices: [ 'auto', 'drm', 'wayland', 'x11', 'fbdev', 'headless' ],
+	choices: [ 'auto', 'drm', 'wayland', 'x11', 'fbdev', 'headless', 'rdp' ],
 	value: 'drm',
 	description: 'Default backend when no parent display server detected'
 )
@@ -129,6 +129,12 @@ option(
 	type: 'boolean',
 	value: true,
 	description: 'Weston shell UI: kiosk (desktop apps)'
+)
+option(
+	'shell-rdprail',
+	type: 'boolean',
+	value: true,
+	description: 'Weston shell UI: RDP remote application shell'
 )
 
 option(

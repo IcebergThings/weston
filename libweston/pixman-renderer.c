@@ -811,22 +811,43 @@ pixman_renderer_surface_get_content_size(struct weston_surface *surface,
 
 static int
 pixman_renderer_surface_copy_content(struct weston_surface *surface,
-				     void *target, size_t size,
+				     void *target, size_t size, size_t target_stride,
+				     int target_width, int target_height,
 				     int src_x, int src_y,
-				     int width, int height)
+				     int src_width, int src_height,
+				     bool y_flip, bool is_argb)
 {
-	const pixman_format_code_t format = PIXMAN_a8b8g8r8;
-	const size_t bytespp = 4; /* PIXMAN_a8b8g8r8 */
+	const pixman_format_code_t format = is_argb ? PIXMAN_a8r8g8b8 : PIXMAN_a8b8g8r8;
 	struct pixman_surface_state *ps = get_surface_state(surface);
 	pixman_image_t *out_buf;
+	pixman_transform_t transform;
+	double scale_x;
+	double scale_y;
 
 	if (!ps->image)
 		return -1;
 
-	out_buf = pixman_image_create_bits(format, width, height,
-					   target, width * bytespp);
+	out_buf = pixman_image_create_bits(format, target_width, target_height,
+					   target, target_stride);
 
-	pixman_image_set_transform(ps->image, NULL);
+	scale_x = (double)src_width / target_width;
+	scale_y = (double)src_height / target_height;
+	src_x *= (1.0f / scale_x);
+	src_y *= (1.0f / scale_y);
+
+	if (y_flip) {
+		pixman_transform_init_scale(&transform,
+					    pixman_double_to_fixed(scale_x),
+					    pixman_double_to_fixed(-scale_y));
+		pixman_transform_translate(&transform, NULL,
+					   0,
+					   pixman_int_to_fixed(src_height));
+	} else {
+		pixman_transform_init_scale(&transform,
+					    pixman_double_to_fixed(scale_x),
+					    pixman_double_to_fixed(scale_y));
+	}
+	pixman_image_set_transform(ps->image, &transform);
 	pixman_image_composite32(PIXMAN_OP_SRC,
 				 ps->image,    /* src */
 				 NULL,         /* mask */
@@ -834,8 +855,8 @@ pixman_renderer_surface_copy_content(struct weston_surface *surface,
 				 src_x, src_y, /* src_x, src_y */
 				 0, 0,         /* mask_x, mask_y */
 				 0, 0,         /* dest_x, dest_y */
-				 width, height);
-
+				 target_width, target_height);
+	pixman_image_set_transform(ps->image, NULL);
 	pixman_image_unref(out_buf);
 
 	return 0;

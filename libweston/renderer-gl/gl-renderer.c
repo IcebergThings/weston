@@ -2702,6 +2702,8 @@ pack_color(pixman_format_code_t format, float *c)
 	switch (format) {
 	case PIXMAN_a8b8g8r8:
 		return (a << 24) | (b << 16) | (g << 8) | r;
+	case PIXMAN_a8r8g8b8:
+		return (a << 24) | (r << 16) | (g << 8) | b;
 	default:
 		assert(0);
 		return 0;
@@ -2710,10 +2712,16 @@ pack_color(pixman_format_code_t format, float *c)
 
 static int
 gl_renderer_surface_copy_content(struct weston_surface *surface,
-				 void *target, size_t size,
+				 void *target, size_t size, size_t stride,
+				 int target_width, int target_height,
 				 int src_x, int src_y,
-				 int width, int height)
+				 int width, int height,
+				 bool y_flip, bool is_argb)
 {
+	/*TODO:add scaling support*/
+	assert(target_width == width);
+	assert(target_width == height);
+
 	static const GLfloat verts[4 * 2] = {
 		0.0f, 0.0f,
 		1.0f, 0.0f,
@@ -2732,9 +2740,9 @@ gl_renderer_surface_copy_content(struct weston_surface *surface,
 		 0.0f,  0.0f, 1.0f, 0.0f,
 		-1.0f,  1.0f, 0.0f, 1.0f
 	};
-	const pixman_format_code_t format = PIXMAN_a8b8g8r8;
+	const pixman_format_code_t format = is_argb ? PIXMAN_a8r8g8b8 : PIXMAN_a8b8g8r8;
 	const size_t bytespp = 4; /* PIXMAN_a8b8g8r8 */
-	const GLenum gl_format = GL_RGBA; /* PIXMAN_a8b8g8r8 little-endian */
+	const GLenum gl_format = is_argb ? GL_BGRA_EXT : GL_RGBA; /* PIXMAN_a8b8g8r8 little-endian */
 	struct gl_renderer *gr = get_renderer(surface->compositor);
 	struct gl_surface_state *gs = get_surface_state(surface);
 	int cw, ch;
@@ -2781,7 +2789,7 @@ gl_renderer_surface_copy_content(struct weston_surface *surface,
 	glViewport(0, 0, cw, ch);
 	glDisable(GL_BLEND);
 	use_shader(gr, gs->shader);
-	if (gs->y_inverted)
+	if (gs->y_inverted ^ y_flip)
 		proj = projmat_normal;
 	else
 		proj = projmat_yinvert;
@@ -2812,8 +2820,18 @@ gl_renderer_surface_copy_content(struct weston_surface *surface,
 	glDisableVertexAttribArray(0);
 
 	glPixelStorei(GL_PACK_ALIGNMENT, bytespp);
-	glReadPixels(src_x, src_y, width, height, gl_format,
-		     GL_UNSIGNED_BYTE, target);
+	if (stride) {
+		/* GL_PACK_ROW_LENGTH can be used when supported,
+		   but it's not supported with EGL2, thus copy row by row. */
+		char *dst = (char *)target;
+		for (int i = 0; i < height; i++, dst += stride) {
+			glReadPixels(src_x, src_y+i, width, 1, gl_format,
+				     GL_UNSIGNED_BYTE, dst);
+		}
+	} else {
+		glReadPixels(src_x, src_y, width, height, gl_format,
+			     GL_UNSIGNED_BYTE, target);
+	}
 
 	glDeleteFramebuffers(1, &fbo);
 	glDeleteTextures(1, &tex);

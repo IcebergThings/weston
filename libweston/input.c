@@ -1890,10 +1890,12 @@ notify_button(struct weston_seat *seat, const struct timespec *time,
 			pointer->grab_x = pointer->x;
 			pointer->grab_y = pointer->y;
 		}
-		pointer->button_count++;
+		pointer->button_count=1; //TODO: Need to keep track of button indivually, avoid overflow/underflowing when the same button state is provided multiple time. For now just cap to 1/0.
+		//pointer->button_count++;
 	} else {
 		weston_compositor_idle_release(compositor);
-		pointer->button_count--;
+		pointer->button_count=0; //TODO: Need to keep track of button indivually, avoid overflow/underflowing when the same button state is provided multiple time. For now just cap to 1/0.
+		//pointer->button_count--;
 	}
 
 	weston_compositor_run_button_binding(compositor, pointer, time, button,
@@ -3621,15 +3623,15 @@ weston_seat_set_keyboard_focus(struct weston_seat *seat,
 	if (keyboard && keyboard->focus != surface) {
 		weston_keyboard_set_focus(keyboard, surface);
 		wl_data_device_set_keyboard_focus(seat);
+	
+		inc_activate_serial(compositor);
+
+		activation_data = (struct weston_surface_activation_data) {
+			.surface = surface,
+			.seat = seat,
+		};
+		wl_signal_emit(&compositor->activate_signal, &activation_data);
 	}
-
-	inc_activate_serial(compositor);
-
-	activation_data = (struct weston_surface_activation_data) {
-		.surface = surface,
-		.seat = seat,
-	};
-	wl_signal_emit(&compositor->activate_signal, &activation_data);
 }
 
 static void

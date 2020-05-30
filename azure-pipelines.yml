@@ -1,0 +1,137 @@
+# This pipeline will just build Weston to be sure we dont break
+
+resources:
+  repositories:
+  - repository: FreeRDP
+    type: github
+    endpoint: GitHub connection 1
+    name: microsoft/FreeRDP-mirror
+    ref: working
+
+trigger:
+  - working
+  
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  prefix: '/usr/local'
+
+steps:
+  - checkout: FreeRDP
+  - checkout: self
+
+  - script: sudo apt-get update && sudo apt-get install --no-install-recommends -y
+            build-essential
+            cmake
+            git
+            libcairo2-dev
+            libcolord-dev
+            libdbus-glib-1-dev
+            libdrm-dev
+            libffi-dev
+            libgbm-dev
+            libgles2-mesa-dev
+            libgstreamer-plugins-base1.0-dev
+            libgstreamer1.0-dev
+            libinput-dev
+            libjpeg-dev
+            liblcms2-dev
+            libpam-dev
+            libpango1.0-dev
+            libpixman-1-dev
+            libssl-dev
+            libsystemd-dev
+            libtool
+            libudev-dev
+            libudev-dev
+            libusb-1.0-0-dev
+            libva-dev
+            libwebp-dev
+            libx11-dev
+            libx11-xcb-dev
+            libxcb-composite0-dev
+            libxcb-xkb-dev
+            libxcursor-dev
+            libxdamage-dev
+            libxext-dev
+            libxfixes-dev
+            libxi-dev
+            libxinerama-dev
+            libxkbcommon-dev
+            libxkbfile-dev
+            libxml2-dev
+            libxrandr-dev
+            libxrender-dev
+            libxtst-dev
+            libxv-dev
+            lsb-release
+            python3-setuptools
+            python3-pip
+            ninja-build
+            pkg-config
+            software-properties-common
+            squashfs-tools
+            uuid-dev
+            libwayland-dev
+            wayland-protocols
+            wget 
+    displayName: 'Install Dependencies'
+
+
+    
+  - script: cmake -G Ninja
+          -B build
+          -DCMAKE_INSTALL_PREFIX=$(prefix)
+          -DCMAKE_INSTALL_LIBDIR=$(prefix)/lib 
+          -DCMAKE_BUILD_TYPE=RelWithDebInfo 
+          -DWITH_SERVER=ON
+          -DWITH_CHANNEL_GFXREDIR=ON 
+          -DWITH_CHANNEL_RDPAPPLIST=ON 
+          -DWITH_CLIENT=OFF
+          -DWITH_CLIENT_COMMON=OFF
+          -DWITH_CLIENT_CHANNELS=OFF
+          -DWITH_CLIENT_INTERFACE=OFF
+          -DWITH_PROXY=OFF
+          -DWITH_SHADOW=OFF
+          -DWITH_SAMPLE=OFF
+    workingDirectory: ./FreeRDP-mirror
+    displayName: 'CMake (Ninja)'
+  
+  - script: ninja -C build -j8
+    workingDirectory: ./FreeRDP-mirror
+    displayName: 'Ninja build'
+
+  - script: sudo ninja -C build install
+    workingDirectory: ./FreeRDP-mirror
+    displayName: 'Ninja Install (FreeRDP)'
+
+  - script: sudo pip3 install meson
+    displayName: 'Install Meson (from PIP)'
+
+  - script: meson --prefix=$(prefix) build 
+                  -Dbackend-default=rdp 
+                  -Dbackend-drm=false 
+                  -Dbackend-drm-screencast-vaapi=false 
+                  -Dbackend-headless=false 
+                  -Dbackend-wayland=false 
+                  -Dbackend-x11=false 
+                  -Dbackend-fbdev=false 
+                  -Dscreenshare=false 
+                  -Dremoting=false 
+                  -Dpipewire=false 
+                  -Dshell-fullscreen=false 
+                  -Dshell-ivi=false 
+                  -Dshell-kiosk=false
+                  -Ddemo-clients=false 
+                  -Dsimple-clients=[] 
+                  -Dtools=[] 
+                  -Dresize-pool=false 
+                  -Dwcap-decode=false 
+                  -Dtest-junit-xml=false
+    workingDirectory: ./weston-mirror
+    displayName: 'Meson (weston)'
+
+  - script: ninja -C build -j8
+    workingDirectory: ./weston-mirror
+    displayName: 'Ninja (weston)'

@@ -363,11 +363,16 @@ static void
 set_window_geometry(struct weston_desktop_xwayland_surface *surface,
 		    int32_t x, int32_t y, int32_t width, int32_t height)
 {
-	surface->has_next_geometry = true;
-	surface->next_geometry.x = x;
-	surface->next_geometry.y = y;
-	surface->next_geometry.width = width;
-	surface->next_geometry.height = height;
+	if (surface->next_geometry.x != x ||
+	    surface->next_geometry.y != y ||
+	    surface->next_geometry.width != width ||
+	    surface->next_geometry.height != height) {
+		surface->has_next_geometry = true;
+		surface->next_geometry.x = x;
+		surface->next_geometry.y = y;
+		surface->next_geometry.width = width;
+		surface->next_geometry.height = height;
+	}
 }
 
 static void
@@ -377,6 +382,21 @@ set_maximized(struct weston_desktop_xwayland_surface *surface)
 						     0, 0);
 	weston_desktop_api_maximized_requested(surface->desktop,
 					       surface->surface, true);
+}
+
+static void
+set_minimized(struct weston_desktop_xwayland_surface *surface)
+{
+	weston_desktop_api_minimized_requested(surface->desktop,
+					       surface->surface);
+}
+
+static void
+set_window_icon(struct weston_desktop_xwayland_surface *surface,
+		int32_t width, int32_t height, int32_t bpp, void *bits)
+{
+	weston_desktop_api_set_window_icon(surface->desktop,
+		surface->surface, width, height, bpp, bits);
 }
 
 static void
@@ -398,7 +418,9 @@ static const struct weston_desktop_xwayland_interface weston_desktop_xwayland_in
 	.set_title = set_title,
 	.set_window_geometry = set_window_geometry,
 	.set_maximized = set_maximized,
+	.set_minimized = set_minimized,
 	.set_pid = set_pid,
+	.set_window_icon = set_window_icon,
 };
 
 void

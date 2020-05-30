@@ -177,8 +177,8 @@ trigger_binding(struct weston_keyboard *keyboard, const struct timespec *time,
 		return;
 	}
 
-	ret = weston_surface_copy_content(surface, pixels, sz,
-					  0, 0, width, height);
+	ret = weston_surface_copy_content(surface, pixels, sz, 0, 0, 0,
+					  0, 0, width, height, false, false);
 	if (ret < 0) {
 		weston_log("shooting surface %p failed\n", surface);
 		goto out;
