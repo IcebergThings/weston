@@ -1890,12 +1890,10 @@ notify_button(struct weston_seat *seat, const struct timespec *time,
 			pointer->grab_x = pointer->x;
 			pointer->grab_y = pointer->y;
 		}
-		pointer->button_count=1; //TODO: Need to keep track of button indivually, avoid overflow/underflowing when the same button state is provided multiple time. For now just cap to 1/0.
-		//pointer->button_count++;
+		pointer->button_count++;
 	} else {
 		weston_compositor_idle_release(compositor);
-		pointer->button_count=0; //TODO: Need to keep track of button indivually, avoid overflow/underflowing when the same button state is provided multiple time. For now just cap to 1/0.
-		//pointer->button_count--;
+		pointer->button_count--;
 	}
 
 	weston_compositor_run_button_binding(compositor, pointer, time, button,
