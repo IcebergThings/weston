@@ -1568,7 +1568,8 @@ xf_input_synchronize_event(rdpInput *input, UINT32 flags)
 	pixman_box32_t box;
 	pixman_region32_t damage;
 
-	rdp_debug_verbose(b, "input_synchronize_event: ScrLk:%d, NumLk:%d, CapsLk:%d, KanaLk:%d\n",
+	rdp_debug_verbose(b, "RDP backend: %s ScrLk:%d, NumLk:%d, CapsLk:%d, KanaLk:%d\n",
+		__func__,
 		flags & KBD_SYNC_SCROLL_LOCK ? 1 : 0,
 		flags & KBD_SYNC_NUM_LOCK ? 1 : 0,
 		flags & KBD_SYNC_CAPS_LOCK ? 1 : 0,
@@ -1608,6 +1609,8 @@ xf_input_keyboard_event(rdpInput *input, UINT16 flags, UINT16 code)
 	uint32_t scan_code, vk_code, full_code;
 	enum wl_keyboard_key_state keyState;
 	RdpPeerContext *peerContext = (RdpPeerContext *)input->context;
+	struct rdp_backend *b = peerContext->rdpBackend;
+
 	int notify = 0;
 	struct timespec time;
 
@@ -1628,6 +1631,15 @@ xf_input_keyboard_event(rdpInput *input, UINT16 flags, UINT16 code)
 			full_code |= KBD_FLAGS_EXTENDED;
 
 		vk_code = GetVirtualKeyCodeFromVirtualScanCode(full_code, 4);
+		assert(vk_code <= 0xFF);
+		if (keyState == WL_KEYBOARD_KEY_STATE_RELEASED) {
+			/* Ignore release if key is not previously pressed. */
+			if ((peerContext->key_state[vk_code>>3] & (1<<(vk_code&0x7))) == 0)
+				goto exit;
+			peerContext->key_state[vk_code>>3] &= ~(1<<(vk_code&0x7));
+		} else {
+			peerContext->key_state[vk_code>>3] |= (1<<(vk_code&0x7));
+		}
 		if (flags & KBD_FLAGS_EXTENDED)
 			vk_code |= KBDEXT;
 
@@ -1638,8 +1650,13 @@ xf_input_keyboard_event(rdpInput *input, UINT16 flags, UINT16 code)
 		weston_compositor_get_time(&time);
 		notify_key(peerContext->item.seat, &time,
 					scan_code - 8, keyState, STATE_UPDATE_AUTOMATIC);
+
+		/*rdp_debug_verbose(b, "RDP backend: %s code=%x ext=%d vk_code=%x scan_code=%x pressed=%d, idle_inhibit=%d\n",
+			__func__, code, (flags & KBD_FLAGS_EXTENDED) ? 1 : 0,
+			vk_code, scan_code, keyState, b->compositor->idle_inhibit);*/
 	}
 
+exit:
 	FREERDP_CB_RETURN(TRUE);
 }
 

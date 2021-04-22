@@ -2194,12 +2194,6 @@ notify_key(struct weston_seat *seat, const struct timespec *time, uint32_t key,
 	struct weston_keyboard_grab *grab = keyboard->grab;
 	uint32_t *k, *end;
 
-	if (state == WL_KEYBOARD_KEY_STATE_PRESSED) {
-		weston_compositor_idle_inhibit(compositor);
-	} else {
-		weston_compositor_idle_release(compositor);
-	}
-
 	end = keyboard->keys.data + keyboard->keys.size;
 	for (k = keyboard->keys.data; k < end; k++) {
 		if (*k == key) {
@@ -2239,6 +2233,12 @@ notify_key(struct weston_seat *seat, const struct timespec *time, uint32_t key,
 	if (state == WL_KEYBOARD_KEY_STATE_PRESSED) {
 		keyboard->grab_time = *time;
 		keyboard->grab_key = key;
+	}
+
+	if (state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+		weston_compositor_idle_inhibit(compositor);
+	} else {
+		weston_compositor_idle_release(compositor);
 	}
 }
 
