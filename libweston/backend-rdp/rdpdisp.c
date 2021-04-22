@@ -467,7 +467,7 @@ disp_monitor_validate_and_compute_layout(RdpPeerContext *peerCtx, struct rdp_mon
 		isScalingSupported = false;
 	}
 
-	if (isScalingSupported) {
+	if (isScalingUsed && isScalingSupported) {
 		uint32_t offsetFromOriginWeston = 0;
 		for (i = 0; i < monitorCount; i++) {
 			monitorMode[i].rectWeston.width = monitorMode[i].monitorDef.width / monitorMode[i].scale;
@@ -485,7 +485,7 @@ disp_monitor_validate_and_compute_layout(RdpPeerContext *peerCtx, struct rdp_mon
 			}
 		}
 	} else {
-		/* monitor placement is too complex to scale in weston space, fallback to 1.0f */
+		/* no scaling is used or monitor placement is too complex to scale in weston space, fallback to 1.0f */
 		for (i = 0; i < monitorCount; i++) {
 			monitorMode[i].rectWeston.width = monitorMode[i].monitorDef.width;
 			monitorMode[i].rectWeston.height = monitorMode[i].monitorDef.height;
