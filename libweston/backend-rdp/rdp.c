@@ -292,6 +292,21 @@ rdp_output_repaint(struct weston_output *output_base, pixman_region32_t *damage,
 	struct rdp_peers_item *outputPeer;
 	struct rdp_backend *b = to_rdp_backend(ec);
 
+	/* Calculate the time we should complete this frame such that frames
+	   are spaced out by the specified monitor refresh. */
+	struct timespec now;
+	weston_compositor_read_presentation_clock(ec, &now);
+
+	struct timespec target;
+	int refresh_nsec = millihz_to_nsec(output_base->current_mode->refresh);
+	int refresh_msec = refresh_nsec / 1000000;
+	timespec_add_nsec(&target, &output_base->frame_time, refresh_nsec);
+
+	int next_frame_delta = (int)timespec_sub_to_msec(&target, &now);
+	if ( next_frame_delta < 1 || next_frame_delta > refresh_msec) {
+		next_frame_delta = refresh_msec;
+	}
+
 	if (b->rdp_peer &&
 		b->rdp_peer->settings->HiDefRemoteApp) {
 		/* RAIL mode, repaint RAIL window */
@@ -324,7 +339,7 @@ rdp_output_repaint(struct weston_output *output_base, pixman_region32_t *damage,
 					&ec->primary_plane.damage, damage);
 	}
 
-	wl_event_source_timer_update(output->finish_frame_timer, b->rdp_repaint_delay_ms);
+	wl_event_source_timer_update(output->finish_frame_timer, next_frame_delta);
 	return 0;
 }
 
@@ -454,7 +469,7 @@ rdp_output_get_config(struct weston_output *base,
 		struct rdp_head *h = to_rdp_head(head);
 
 		rdp_debug(rdpBackend, "get_config: attached head [%d]: make:%s, mode:%s, name:%s, (%p)\n",
-			h->index, head->make, head->model, head->name, head); 
+			h->index, head->make, head->model, head->name, head);
 		rdp_debug(rdpBackend, "get_config: attached head [%d]: x:%d, y:%d, width:%d, height:%d\n",
 			h->index, h->monitorMode.monitorDef.x, h->monitorMode.monitorDef.y,
 				  h->monitorMode.monitorDef.width, h->monitorMode.monitorDef.height);
@@ -494,7 +509,7 @@ rdp_output_set_size(struct weston_output *base,
 		weston_head_set_monitor_strings(head, "weston", "rdp", NULL);
 
 		rdp_debug(rdpBackend, "set_size: attached head [%d]: make:%s, mode:%s, name:%s, (%p)\n",
-			h->index, head->make, head->model, head->name, head); 
+			h->index, head->make, head->model, head->name, head);
 		rdp_debug(rdpBackend, "set_size: attached head [%d]: x:%d, y:%d, width:%d, height:%d\n",
 			h->index, h->monitorMode.monitorDef.x, h->monitorMode.monitorDef.y,
 				  h->monitorMode.monitorDef.width, h->monitorMode.monitorDef.height);
@@ -710,7 +725,7 @@ rdp_head_create(struct weston_compositor *compositor, BOOL isPrimary, struct rdp
 			monitorMode->rectWeston.width, monitorMode->rectWeston.height);
 	} else {
 		head->monitorMode.scale = 1.0f;
-		head->monitorMode.clientScale = 1; 
+		head->monitorMode.clientScale = 1;
 		pixman_region32_init(&head->regionClient);
 		pixman_region32_init(&head->regionWeston);
 	}
@@ -1461,7 +1476,7 @@ xf_mouseEvent(rdpInput *input, UINT16 flags, UINT16 x, UINT16 y)
 	/* Per RDP spec, the x,y position is valid on all input mouse messages,
 	 * except for PTR_FLAGS_WHEEL and PTR_FLAGS_HWHEEL event. Take the opportunity
 	 * to resample our x,y position even when PTR_FLAGS_MOVE isn't explicitly set,
-	 * for example a button down/up only notification, to ensure proper sync with 
+	 * for example a button down/up only notification, to ensure proper sync with
 	 * the RDP client.
 	 */
 	if (!(flags & (PTR_FLAGS_WHEEL | PTR_FLAGS_HWHEEL))) {
@@ -1752,11 +1767,11 @@ rdp_peer_init(freerdp_peer *client, struct rdp_backend *b)
 	settings->NSCodec = TRUE;
 	settings->FrameMarkerCommandEnabled = TRUE;
 	settings->SurfaceFrameMarkerEnabled = TRUE;
-	settings->RemoteApplicationMode = TRUE; 
+	settings->RemoteApplicationMode = TRUE;
 	settings->RemoteApplicationSupportLevel =
 		RAIL_LEVEL_SUPPORTED |
 		RAIL_LEVEL_SHELL_INTEGRATION_SUPPORTED |
-		RAIL_LEVEL_LANGUAGE_IME_SYNC_SUPPORTED | 
+		RAIL_LEVEL_LANGUAGE_IME_SYNC_SUPPORTED |
 		RAIL_LEVEL_SERVER_TO_CLIENT_IME_SYNC_SUPPORTED |
 		RAIL_LEVEL_HANDSHAKE_EX_SUPPORTED;
 	settings->SupportGraphicsPipeline = TRUE;
@@ -1887,7 +1902,7 @@ rdp_generate_session_tls(struct rdp_backend *b)
 	b->server_key_content = (char *)calloc(mem->length+1, 1);
 	memcpy(b->server_key_content, mem->data, mem->length);
 	BIO_free_all(bio);
-	
+
 	x509 = X509_new();
 	X509_set_version(x509, 2);
 	RAND_bytes((unsigned char *)&serial, sizeof(serial));
@@ -2051,23 +2066,18 @@ rdp_backend_create(struct weston_compositor *compositor,
 	weston_log("RDP backend: WESTON_RDP_DEBUG_LEVEL: %d\n", b->debugLevel);
 	/* After here, rdp_debug() is ready to be used */
 
-	s = getenv("WESTON_RDP_MONITOR_REFRESH_RATE"); 
+	s = getenv("WESTON_RDP_MONITOR_REFRESH_RATE");
 	if (s) {
-		if (!safe_strtoint(s, &b->rdp_monitor_refresh_rate))
+		if (!safe_strtoint(s, &b->rdp_monitor_refresh_rate) ||
+			b->rdp_monitor_refresh_rate == 0) {
 			b->rdp_monitor_refresh_rate = RDP_MODE_FREQ;
+		} else {
+			b->rdp_monitor_refresh_rate *= 1000;
+		}
 	} else {
 		b->rdp_monitor_refresh_rate = RDP_MODE_FREQ;
 	}
 	rdp_debug(b, "RDP backend: WESTON_RDP_MONITOR_REFRESH_RATE: %d\n", b->rdp_monitor_refresh_rate);
-
-	s = getenv("WESTON_RDP_REPAINT_DELAY_MS"); 
-	if (s) {
-		if (!safe_strtoint(s, &b->rdp_repaint_delay_ms))
-			b->rdp_repaint_delay_ms = 16;
-	} else {
-		b->rdp_repaint_delay_ms = 16;
-	}
-	rdp_debug(b, "RDP backend: WESTON_RDP_REPAINT_DELAY_MS: %d\n", b->rdp_repaint_delay_ms);
 
 	clock_getres(CLOCK_MONOTONIC, &ts);
 	rdp_debug(b, "RDP backend: timer resolution tv_sec:%ld tv_nsec:%ld\n", (intmax_t)ts.tv_sec, ts.tv_nsec);
@@ -2083,7 +2093,7 @@ rdp_backend_create(struct weston_compositor *compositor,
 	compositor->backend = &b->base;
 
 	fd = use_vsock_fd(config->port);
-	/* if we are using VSOCK to connect to the rdp backend, we don't need to enforce the TLS 
+	/* if we are using VSOCK to connect to the rdp backend, we don't need to enforce the TLS
 	   encryption, since FreeRDP will consider AF_UNIX and AF_VSOCK as a local connection */
 	if (fd <= 0 || config->env_socket)
 	{

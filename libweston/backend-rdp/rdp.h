@@ -184,7 +184,6 @@ struct rdp_backend {
 	uint32_t debug_desktop_scaling_factor; /* must be between 100 to 500 */
 
 	int rdp_monitor_refresh_rate;
-	int rdp_repaint_delay_ms;
 
 #if defined(HAVE_FREERDP_RDPAPPLIST_H) || defined(HAVE_FREERDP_GFXREDIR_H)
 	void *libFreeRDPServer;
@@ -222,7 +221,7 @@ struct rdp_peers_item {
 
 struct rdp_monitor_mode {
 	rdpMonitor monitorDef; // in client coordinate.
-	int scale; // per monitor DPI scaling. 
+	int scale; // per monitor DPI scaling.
 	float clientScale;
 	pixman_rectangle32_t rectWeston; // in weston coordinate.
 };
@@ -247,7 +246,7 @@ struct rdp_output {
 	uint32_t index;
 
 	struct wl_list peers;
-	struct wl_list link; // rdp_backend::output_list 
+	struct wl_list link; // rdp_backend::output_list
 };
 
 typedef struct _rdp_audio_block_info {
@@ -527,7 +526,7 @@ to_weston_x(RdpPeerContext *peer, int32_t x)
 }
 
 /* TO BE REMOVED */
-static inline int32_t 
+static inline int32_t
 to_weston_y(RdpPeerContext *peer, int32_t y)
 {
 	return y - peer->regionClientHeads.extents.y1;
@@ -616,7 +615,7 @@ to_client_coordinate(RdpPeerContext *peerContext, struct weston_output *output, 
 		to_client_scale_only(peerContext, output, scale, &sx, &sy);
 		if (width && height)
 			to_client_scale_only(peerContext, output, scale, width, height);
-		/* translate x/y to offset from this output on client space. */ 
+		/* translate x/y to offset from this output on client space. */
 		sx += head->monitorMode.monitorDef.x;
 		sy += head->monitorMode.monitorDef.y;
 		rdp_debug_verbose(b, "%s: (x:%d, y:%d) -> (sx:%d, sy:%d) at head:%s\n",
