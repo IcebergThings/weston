@@ -110,7 +110,6 @@
 #include "shared/timespec-util.h"
 
 #define MAX_FREERDP_FDS 32
-#define DEFAULT_AXIS_STEP_DISTANCE 10
 #define RDP_MODE_FREQ 60 * 1000
 #define RDP_MAX_MONITOR 16 // RDP max monitors.
 
@@ -273,7 +272,8 @@ struct rdp_peer_context {
 
 	bool button_state[5];
 	char key_state[0xff/8]; // one bit per key.
-	int accumWheelRotation;
+	int accumWheelRotationPrecise;
+	int accumWheelRotationDiscrete;
 
 	// RAIL support
 	HANDLE vcm;
