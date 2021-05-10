@@ -1467,6 +1467,7 @@ static FREERDP_CB_RET_TYPE
 xf_mouseEvent(rdpInput *input, UINT16 flags, UINT16 x, UINT16 y)
 {
 	RdpPeerContext *peerContext = (RdpPeerContext *)input->context;
+	struct rdp_backend *b = peerContext->rdpBackend;
 	uint32_t button = 0;
 	bool need_frame = false;
 	struct timespec time;
@@ -1510,7 +1511,7 @@ xf_mouseEvent(rdpInput *input, UINT16 flags, UINT16 x, UINT16 y)
 		int ivalue;
 		double value;
 
-		/* DEFAULT_AXIS_STEP_DISTANCE is stolen from compositor-x11.c
+		/*
 		 * The RDP specs says the lower bits of flags contains the "the number of rotation
 		 * units the mouse wheel was rotated".
 		 *
@@ -1520,22 +1521,37 @@ xf_mouseEvent(rdpInput *input, UINT16 flags, UINT16 x, UINT16 y)
 			ivalue = (int)((char)(flags & 0xff));
 		else
 			ivalue = (flags & 0xff);
-		peerContext->accumWheelRotation += ivalue;
-		if (abs(peerContext->accumWheelRotation) >= 12) {
-			/* multiply -1 is due to directional swap to match Windows direction of scroll. */
-			value = (double)(peerContext->accumWheelRotation / 12) * -1;
+
+		/* Flip the scroll direction as the RDP direction is inverse of X/Wayland */
+		ivalue *= -1;
+
+		/*
+		 * Accumulate the wheel increments.
+		 *
+		 * Every 12 wheel increments, we will send an update to our Wayland
+		 * clients with an updated value for the wheel for smooth scrolling.
+		 *
+		 * Every 120 wheel increments, we tick one discrete wheel click.
+		 */
+		peerContext->accumWheelRotationPrecise += ivalue;
+		peerContext->accumWheelRotationDiscrete += ivalue;
+		if (abs(peerContext->accumWheelRotationPrecise) >= 12) {
+			value = (double)(peerContext->accumWheelRotationPrecise / 12);
 
 			weston_event.axis = WL_POINTER_AXIS_VERTICAL_SCROLL;
-			weston_event.value = DEFAULT_AXIS_STEP_DISTANCE * value;
-			weston_event.discrete = (int)value;
+			weston_event.value = value;
+			weston_event.discrete = peerContext->accumWheelRotationDiscrete / 120;
 			weston_event.has_discrete = true;
+
+			rdp_debug_verbose(b, "wheel: value:%f discrete:%d\n", weston_event.value, weston_event.discrete);
 
 			weston_compositor_get_time(&time);
 
 			notify_axis(peerContext->item.seat, &time, &weston_event);
 			need_frame = true;
 
-			peerContext->accumWheelRotation %= 12;
+			peerContext->accumWheelRotationPrecise %= 12;
+			peerContext->accumWheelRotationDiscrete %= 120;
 		}
 	}
 
