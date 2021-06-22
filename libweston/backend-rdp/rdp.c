@@ -1454,6 +1454,8 @@ dump_mouseinput(RdpPeerContext *peerContext, UINT16 flags, UINT16 x, UINT16 y, b
 			rdp_debug_verbose_continue(b, "WHEEL ");
 		if (flags & PTR_FLAGS_WHEEL_NEGATIVE)
 			rdp_debug_verbose_continue(b, "WHEEL_NEGATIVE ");
+		if (flags & PTR_FLAGS_HWHEEL)
+			rdp_debug_verbose_continue(b, "HWHEEL ");
 		if (flags & PTR_FLAGS_MOVE)
 			rdp_debug_verbose_continue(b, "MOVE ");
 		if (flags & PTR_FLAGS_DOWN)
@@ -1486,11 +1488,71 @@ rdp_validate_button_state(RdpPeerContext *peerContext, bool pressed, uint32_t* b
 	return;
 }
 
+static bool
+rdp_notify_wheel_scroll(RdpPeerContext *peerContext, UINT16 flags, uint32_t axis)
+{
+	struct weston_pointer_axis_event weston_event;
+	struct rdp_backend *b = peerContext->rdpBackend;
+	int ivalue;
+	double value;
+	struct timespec time;
+
+	/*
+		* The RDP specs says the lower bits of flags contains the "the number of rotation
+		* units the mouse wheel was rotated".
+		*
+		* https://blogs.msdn.microsoft.com/oldnewthing/20130123-00/?p=5473 explains the 120 value
+		*/
+	if (flags & PTR_FLAGS_WHEEL_NEGATIVE)
+		ivalue = (int)((char)(flags & 0xff));
+	else
+		ivalue = (flags & 0xff);
+
+	/*
+		* Flip the scroll direction as the RDP direction is inverse of X/Wayland 
+		* for vertical scroll 
+		*/
+	if (axis == WL_POINTER_AXIS_VERTICAL_SCROLL)
+		ivalue *= -1;
+
+	/*
+		* Accumulate the wheel increments.
+		*
+		* Every 12 wheel increments, we will send an update to our Wayland
+		* clients with an updated value for the wheel for smooth scrolling.
+		*
+		* Every 120 wheel increments, we tick one discrete wheel click.
+		*/
+	peerContext->accumWheelRotationPrecise += ivalue;
+	peerContext->accumWheelRotationDiscrete += ivalue;
+	if (abs(peerContext->accumWheelRotationPrecise) >= 12) {
+		value = (double)(peerContext->accumWheelRotationPrecise / 12);
+
+		weston_event.axis = axis;
+		weston_event.value = value;
+		weston_event.discrete = peerContext->accumWheelRotationDiscrete / 120;
+		weston_event.has_discrete = true;
+
+		rdp_debug_verbose(b, "wheel: value:%f discrete:%d\n", 
+			weston_event.value, weston_event.discrete);
+
+		weston_compositor_get_time(&time);
+
+		notify_axis(peerContext->item.seat, &time, &weston_event);
+
+		peerContext->accumWheelRotationPrecise %= 12;
+		peerContext->accumWheelRotationDiscrete %= 120;
+		
+		return true;
+	}
+
+	return false;
+}
+
 static FREERDP_CB_RET_TYPE
 xf_mouseEvent(rdpInput *input, UINT16 flags, UINT16 x, UINT16 y)
 {
 	RdpPeerContext *peerContext = (RdpPeerContext *)input->context;
-	struct rdp_backend *b = peerContext->rdpBackend;
 	uint32_t button = 0;
 	bool need_frame = false;
 	struct timespec time;
@@ -1529,53 +1591,15 @@ xf_mouseEvent(rdpInput *input, UINT16 flags, UINT16 x, UINT16 y)
 		need_frame = true;
 	}
 
+	/* Per RDP spec, if both PTRFLAGS_WHEEL and PTRFLAGS_HWHEEL are specified
+	 * then PTRFLAGS_WHEEL takes precedent
+	 */
 	if (flags & PTR_FLAGS_WHEEL) {
-		struct weston_pointer_axis_event weston_event;
-		int ivalue;
-		double value;
-
-		/*
-		 * The RDP specs says the lower bits of flags contains the "the number of rotation
-		 * units the mouse wheel was rotated".
-		 *
-		 * https://blogs.msdn.microsoft.com/oldnewthing/20130123-00/?p=5473 explains the 120 value
-		 */
-		if (flags & PTR_FLAGS_WHEEL_NEGATIVE)
-			ivalue = (int)((char)(flags & 0xff));
-		else
-			ivalue = (flags & 0xff);
-
-		/* Flip the scroll direction as the RDP direction is inverse of X/Wayland */
-		ivalue *= -1;
-
-		/*
-		 * Accumulate the wheel increments.
-		 *
-		 * Every 12 wheel increments, we will send an update to our Wayland
-		 * clients with an updated value for the wheel for smooth scrolling.
-		 *
-		 * Every 120 wheel increments, we tick one discrete wheel click.
-		 */
-		peerContext->accumWheelRotationPrecise += ivalue;
-		peerContext->accumWheelRotationDiscrete += ivalue;
-		if (abs(peerContext->accumWheelRotationPrecise) >= 12) {
-			value = (double)(peerContext->accumWheelRotationPrecise / 12);
-
-			weston_event.axis = WL_POINTER_AXIS_VERTICAL_SCROLL;
-			weston_event.value = value;
-			weston_event.discrete = peerContext->accumWheelRotationDiscrete / 120;
-			weston_event.has_discrete = true;
-
-			rdp_debug_verbose(b, "wheel: value:%f discrete:%d\n", weston_event.value, weston_event.discrete);
-
-			weston_compositor_get_time(&time);
-
-			notify_axis(peerContext->item.seat, &time, &weston_event);
+		if (rdp_notify_wheel_scroll(peerContext, flags, WL_POINTER_AXIS_VERTICAL_SCROLL))
 			need_frame = true;
-
-			peerContext->accumWheelRotationPrecise %= 12;
-			peerContext->accumWheelRotationDiscrete %= 120;
-		}
+	} else if (flags & PTR_FLAGS_HWHEEL) {
+		if (rdp_notify_wheel_scroll(peerContext, flags, WL_POINTER_AXIS_HORIZONTAL_SCROLL))
+			need_frame = true;
 	}
 
 	if (need_frame)
@@ -1861,6 +1885,7 @@ rdp_peer_init(freerdp_peer *client, struct rdp_backend *b)
 	settings->SupportMonitorLayoutPdu = TRUE;
 	settings->RedirectClipboard = TRUE;
 	settings->HasExtendedMouseEvent = TRUE;
+	settings->HasHorizontalWheel = TRUE;
 
 	client->Capabilities = xf_peer_capabilities;
 	client->PostConnect = xf_peer_post_connect;
