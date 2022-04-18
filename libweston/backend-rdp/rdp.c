@@ -2070,7 +2070,7 @@ rdp_generate_session_tls(struct rdp_backend *b)
 
 	bio_x509 = BIO_new(BIO_s_mem());
 	assert(bio_x509 != NULL);
-	PEM_write_bio_X509(bio, x509);
+	PEM_write_bio_X509(bio_x509, x509);
 	BIO_get_mem_ptr(bio_x509, &mem_x509);
 	b->server_cert_content = (char *)calloc(mem_x509->length+1, 1);
 	memcpy(b->server_cert_content, mem_x509->data, mem_x509->length);
