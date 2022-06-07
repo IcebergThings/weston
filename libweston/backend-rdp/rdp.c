@@ -820,18 +820,19 @@ static
 int rdp_implant_listener(struct rdp_backend *b, freerdp_listener* instance)
 {
 	int i, fd;
-	int rcount = 0;
-	void* rfds[MAX_FREERDP_FDS];
+	int handle_count = 0;
+	HANDLE handles[MAX_FREERDP_FDS];
 	struct wl_event_loop *loop;
 
-	if (!instance->GetFileDescriptor(instance, rfds, &rcount)) {
-		weston_log("Failed to get FreeRDP file descriptor\n");
+	handle_count = instance->GetEventHandles(instance, handles, MAX_FREERDP_FDS);
+	if (!handle_count) {
+		weston_log("Failed to get FreeRDP handles\n");
 		return -1;
 	}
 
 	loop = wl_display_get_event_loop(b->compositor->wl_display);
-	for (i = 0; i < rcount; i++) {
-		fd = (int)(long)(rfds[i]);
+	for (i = 0; i < handle_count; i++) {
+		fd = GetEventFileDescriptor(handles[i]);
 		b->listener_events[i] = wl_event_loop_add_fd(loop, fd, WL_EVENT_READABLE,
 				rdp_listener_activity, instance);
 	}
@@ -1831,9 +1832,9 @@ is_tls_enabled(struct rdp_backend *b)
 static int
 rdp_peer_init(freerdp_peer *client, struct rdp_backend *b)
 {
-	unsigned i, rcount = 0;
-	void *rfds[MAX_FREERDP_FDS+1]; // +1 for WTSVirtualChannelManagerGetFileDescriptor.
-	int fd;
+	int i, fd;
+	int handle_count = 0;
+	HANDLE handles[MAX_FREERDP_FDS + 1]; /* +1 for virtual channel */
 	struct wl_event_loop *loop;
 	rdpSettings	*settings;
 	rdpInput *input;
@@ -1908,8 +1909,9 @@ rdp_peer_init(freerdp_peer *client, struct rdp_backend *b)
 	input->KeyboardEvent = xf_input_keyboard_event;
 	input->UnicodeKeyboardEvent = xf_input_unicode_keyboard_event;
 
-	if (!client->GetFileDescriptor(client, rfds, &rcount)) {
-		rdp_debug_error(b, "unable to retrieve client fds\n");
+	handle_count = client->GetEventHandles(client, handles, MAX_FREERDP_FDS);
+	if (!handle_count) {
+		rdp_debug_error(b, "unable to retrieve client handles\n");
 		goto error_initialize;
 	}
 
@@ -1917,19 +1919,19 @@ rdp_peer_init(freerdp_peer *client, struct rdp_backend *b)
 	WTSRegisterWtsApiFunctionTable(fn);
 	peerCtx->vcm = WTSOpenServerA((LPSTR)peerCtx);
 	if (peerCtx->vcm) {
-		WTSVirtualChannelManagerGetFileDescriptor(peerCtx->vcm, rfds, &rcount);
+		handles[handle_count++] = WTSVirtualChannelManagerGetEventHandle(peerCtx->vcm);
 	} else {
 		rdp_debug_error(b, "WTSOpenServer is failed! continue without virtual channel.\n");
 	}
 
 	loop = wl_display_get_event_loop(b->compositor->wl_display);
-	for (i = 0; i < rcount; i++) {
-		fd = (int)(long)(rfds[i]);
+	for (i = 0; i < handle_count; i++) {
+		fd = GetEventFileDescriptor(handles[i]);
 
 		peerCtx->events[i] = wl_event_loop_add_fd(loop, fd, WL_EVENT_READABLE,
 				rdp_client_activity, client);
 	}
-	for ( ; i < ARRAY_LENGTH(peerCtx->events); i++)
+	for ( ; i < (int)ARRAY_LENGTH(peerCtx->events); i++)
 		peerCtx->events[i] = 0;
 
 	if (!rdp_initialize_dispatch_task_event_source(peerCtx))
@@ -1954,7 +1956,7 @@ error_rail_initialize:
 	rdp_destroy_dispatch_task_event_source(peerCtx);
 
 error_dispatch_initialize:
-	for (i = 0; i < ARRAY_LENGTH(peerCtx->events); i++) {
+	for (i = 0; i < (int)ARRAY_LENGTH(peerCtx->events); i++) {
 		if (peerCtx->events[i]) {
 			wl_event_source_remove(peerCtx->events[i]);
 			peerCtx->events[i] = NULL;
