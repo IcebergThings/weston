@@ -2720,7 +2720,7 @@ gl_renderer_surface_copy_content(struct weston_surface *surface,
 {
 	/*TODO:add scaling support*/
 	assert(target_width == width);
-	assert(target_width == height);
+	assert(target_height == height);
 
 	static const GLfloat verts[4 * 2] = {
 		0.0f, 0.0f,
