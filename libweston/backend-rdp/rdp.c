@@ -82,7 +82,7 @@ rdp_peer_refresh_rfx(pixman_region32_t *damage, pixman_image_t *image, freerdp_p
 	pixman_box32_t *region, *rects;
 	uint32_t *ptr;
 	RFX_RECT *rfxRect;
-	rdpUpdate *update = peer->update;
+	rdpUpdate *update = peer->context->update;
 	SURFACE_BITS_COMMAND cmd = { 0 };
 	RdpPeerContext *context = (RdpPeerContext *)peer->context;
 
@@ -99,7 +99,7 @@ rdp_peer_refresh_rfx(pixman_region32_t *damage, pixman_image_t *image, freerdp_p
 	cmd.destRight = damage->extents.x2;
 	cmd.destBottom = damage->extents.y2;
 	cmd.bmp.bpp = 32;
-	cmd.bmp.codecID = peer->settings->RemoteFxCodecId;
+	cmd.bmp.codecID = peer->context->settings->RemoteFxCodecId;
 	cmd.bmp.width = width;
 	cmd.bmp.height = height;
 
@@ -136,7 +136,7 @@ rdp_peer_refresh_nsc(pixman_region32_t *damage, pixman_image_t *image, freerdp_p
 {
 	int width, height;
 	uint32_t *ptr;
-	rdpUpdate *update = peer->update;
+	rdpUpdate *update = peer->context->update;
 	SURFACE_BITS_COMMAND cmd = { 0 };
 	RdpPeerContext *context = (RdpPeerContext *)peer->context;
 
@@ -153,7 +153,7 @@ rdp_peer_refresh_nsc(pixman_region32_t *damage, pixman_image_t *image, freerdp_p
 	cmd.destRight = damage->extents.x2;
 	cmd.destBottom = damage->extents.y2;
 	cmd.bmp.bpp = 32;
-	cmd.bmp.codecID = peer->settings->NSCodecId;
+	cmd.bmp.codecID = peer->context->settings->NSCodecId;
 	cmd.bmp.width = width;
 	cmd.bmp.height = height;
 
@@ -187,7 +187,7 @@ pixman_image_flipped_subrect(const pixman_box32_t *rect, pixman_image_t *img, BY
 static void
 rdp_peer_refresh_raw(pixman_region32_t *region, pixman_image_t *image, freerdp_peer *peer)
 {
-	rdpUpdate *update = peer->update;
+	rdpUpdate *update = peer->context->update;
 	SURFACE_BITS_COMMAND cmd = { 0 };
 	SURFACE_FRAME_MARKER marker;
 	pixman_box32_t *rect, subrect;
@@ -212,7 +212,7 @@ rdp_peer_refresh_raw(pixman_region32_t *region, pixman_image_t *image, freerdp_p
 		cmd.destRight = rect->x2;
 		cmd.bmp.width = rect->x2 - rect->x1;
 
-		heightIncrement = peer->settings->MultifragMaxRequestSize / (16 + cmd.bmp.width * 4);
+		heightIncrement = peer->context->settings->MultifragMaxRequestSize / (16 + cmd.bmp.width * 4);
 		remainingHeight = rect->y2 - rect->y1;
 		top = rect->y1;
 
@@ -249,7 +249,7 @@ rdp_peer_refresh_region(pixman_region32_t *region, freerdp_peer *peer)
 {
 	RdpPeerContext *context = (RdpPeerContext *)peer->context;
 	struct rdp_output *output = context->rdpBackend->output_default;
-	rdpSettings *settings = peer->settings;
+	rdpSettings *settings = peer->context->settings;
 
 	if (settings->RemoteFxCodec)
 		rdp_peer_refresh_rfx(region, output->shadow_surface, peer);
@@ -295,7 +295,7 @@ rdp_output_repaint(struct weston_output *output_base, pixman_region32_t *damage,
 	}
 
 	if (b->rdp_peer &&
-		b->rdp_peer->settings->HiDefRemoteApp) {
+		b->rdp_peer->context->settings->HiDefRemoteApp) {
 		/* RAIL mode, repaint RAIL window */
 		rdp_rail_output_repaint(output_base, damage);
 	} else if (output_base->renderer_state) {
@@ -382,7 +382,7 @@ rdp_switch_mode(struct weston_output *output, struct weston_mode *target_mode)
 	const struct pixman_renderer_output_options options = { .use_shadow = true, };
 	bool HiDefRemoteApp = false;
 
-	if (rdpBackend->rdp_peer && rdpBackend->rdp_peer->settings->HiDefRemoteApp)
+	if (rdpBackend->rdp_peer && rdpBackend->rdp_peer->context->settings->HiDefRemoteApp)
 		HiDefRemoteApp = true;
 
 	local_mode = ensure_matching_mode(output, target_mode);
@@ -424,7 +424,7 @@ rdp_switch_mode(struct weston_output *output, struct weston_mode *target_mode)
 		rdpOutput->shadow_surface = new_shadow_buffer;
 
 		wl_list_for_each(rdpPeer, &rdpBackend->output_default->peers, link) {
-			settings = rdpPeer->peer->settings;
+			settings = rdpPeer->peer->context->settings;
 			if (settings->DesktopWidth == (UINT32)target_mode->width &&
 					settings->DesktopHeight == (UINT32)target_mode->height)
 				continue;
@@ -436,7 +436,7 @@ rdp_switch_mode(struct weston_output *output, struct weston_mode *target_mode)
 			} else {
 				settings->DesktopWidth = target_mode->width;
 				settings->DesktopHeight = target_mode->height;
-				rdpPeer->peer->update->DesktopResize(rdpPeer->peer->context);
+				rdpPeer->peer->context->update->DesktopResize(rdpPeer->peer->context);
 			}
 		}
 	}
@@ -462,7 +462,7 @@ rdp_output_get_config(struct weston_output *base,
 				  h->monitorMode.monitorDef.width, h->monitorMode.monitorDef.height);
 
 		/* In HiDef RAIL mode, get monitor resolution from RDP client if provided. */
-		if (client && client->settings->HiDefRemoteApp) {
+		if (client && client->context->settings->HiDefRemoteApp) {
 			if (h->monitorMode.monitorDef.width && h->monitorMode.monitorDef.height) {
 				/* Return true client resolution (not adjusted by DPI) */
 				*width = h->monitorMode.monitorDef.width;
@@ -509,7 +509,7 @@ rdp_output_set_size(struct weston_output *base,
 			h->monitorMode.monitorDef.attributes.physicalHeight);
 
 		/* In HiDef RAIL mode, set this mode as preferred mode */
-		if (client && client->settings->HiDefRemoteApp) {
+		if (client && client->context->settings->HiDefRemoteApp) {
 			if (h->monitorMode.monitorDef.width && h->monitorMode.monitorDef.height) {
 				/* given width/height must match with monitor's if provided */
 				assert(width == h->monitorMode.monitorDef.width);
@@ -559,7 +559,7 @@ rdp_output_enable(struct weston_output *base)
 	};
 	bool HiDefRemoteApp = false;
 
-	if (b->rdp_peer && b->rdp_peer->settings->HiDefRemoteApp)
+	if (b->rdp_peer && b->rdp_peer->context->settings->HiDefRemoteApp)
 		HiDefRemoteApp = true;
 
 	if (HiDefRemoteApp) {
@@ -764,7 +764,7 @@ rdp_destroy(struct weston_compositor *ec)
 		}
 	} else if (b->rdp_peer) {
 		freerdp_peer* client = b->rdp_peer;
-		assert(client->settings->HiDefRemoteApp);
+		assert(client->context->settings->HiDefRemoteApp);
 
 		client->Disconnect(client);
 		freerdp_peer_context_free(client);
@@ -857,8 +857,8 @@ rdp_peer_context_new(freerdp_peer* client, RdpPeerContext* context)
 		return FALSE;
 
 	context->rfx_context->mode = RLGR3;
-	context->rfx_context->width = client->settings->DesktopWidth;
-	context->rfx_context->height = client->settings->DesktopHeight;
+	context->rfx_context->width = client->context->settings->DesktopWidth;
+	context->rfx_context->height = client->context->settings->DesktopHeight;
 	rfx_context_set_pixel_format(context->rfx_context, DEFAULT_PIXEL_FORMAT);
 
 	context->nsc_context = nsc_context_new();
@@ -1169,7 +1169,7 @@ xf_peer_activate(freerdp_peer* client)
 	peerCtx = (RdpPeerContext *)client->context;
 	b = peerCtx->rdpBackend;
 	peersItem = &peerCtx->item;
-	settings = client->settings;
+	settings = client->context->settings;
 
 	if (!settings->SurfaceCommandsEnabled) {
 		rdp_debug_error(b, "client doesn't support required SurfaceCommands\n");
@@ -1254,7 +1254,7 @@ xf_peer_activate(freerdp_peer* client)
 				} else {
 					settings->DesktopWidth = output->base.width;
 					settings->DesktopHeight = output->base.height;
-					client->update->DesktopResize(client->context);
+					client->context->update->DesktopResize(client->context);
 				}
 			} else {
 				/* ask weston to adjust size */
@@ -1348,7 +1348,7 @@ xf_peer_activate(freerdp_peer* client)
 
 	if (!settings->HiDefRemoteApp && output) {
 		/* disable pointer on the client side */
-		pointer = client->update->pointer;
+		pointer = client->context->update->pointer;
 		pointer_system.type = SYSPTR_NULL;
 		pointer->PointerSystem(client->context, &pointer_system);
 
@@ -1672,7 +1672,7 @@ xf_input_synchronize_event(rdpInput *input, UINT32 flags)
 			value);
 	}
 
-	if (!client->settings->HiDefRemoteApp && output) {
+	if (!client->context->settings->HiDefRemoteApp && output) {
 		/* sends a full refresh */
 		box.x1 = 0;
 		box.y1 = 0;
@@ -1725,8 +1725,8 @@ xf_input_keyboard_event(rdpInput *input, UINT16 flags, UINT16 code)
 		/* From Linux's keyboard driver at drivers/input/keyboard/atkbd.c */
 		#define ATKBD_RET_HANJA   0xf1
 		#define ATKBD_RET_HANGEUL 0xf2
-		if (client->settings->KeyboardType == 8 &&
-			client->settings->KeyboardSubType == 6 &&
+		if (client->context->settings->KeyboardType == 8 &&
+			client->context->settings->KeyboardSubType == 6 &&
 			((full_code == (KBD_FLAGS_EXTENDED | ATKBD_RET_HANJA)) ||
 			 (full_code == (KBD_FLAGS_EXTENDED | ATKBD_RET_HANGEUL)))) {
 			if (full_code == (KBD_FLAGS_EXTENDED | ATKBD_RET_HANJA))
@@ -1743,7 +1743,7 @@ xf_input_keyboard_event(rdpInput *input, UINT16 flags, UINT16 code)
 			assert(keyState == WL_KEYBOARD_KEY_STATE_PRESSED);
 			send_release_key = true;
 		} else {
-			vk_code = GetVirtualKeyCodeFromVirtualScanCode(full_code, client->settings->KeyboardType);
+			vk_code = GetVirtualKeyCodeFromVirtualScanCode(full_code, client->context->settings->KeyboardType);
 		}
 		/* Korean keyboard support */
 		/* WinPR's GetKeycodeFromVirtualKeyCode() expects no extended bit for VK_HANGUL and VK_HANJA */
@@ -1847,7 +1847,7 @@ rdp_peer_init(freerdp_peer *client, struct rdp_backend *b)
 	peerCtx = (RdpPeerContext *) client->context;
 	peerCtx->rdpBackend = b;
 
-	settings = client->settings;
+	settings = client->context->settings;
 	/* configure security settings */
 	if (b->rdp_key)
 		settings->RdpKeyFile = strdup(b->rdp_key);
@@ -1895,7 +1895,7 @@ rdp_peer_init(freerdp_peer *client, struct rdp_backend *b)
 	client->Activate = xf_peer_activate;
 	client->AdjustMonitorsLayout = xf_peer_adjust_monitor_layout;
 
-	client->update->SuppressOutput = (pSuppressOutput)xf_suppress_output;
+	client->context->update->SuppressOutput = (pSuppressOutput)xf_suppress_output;
 
 #if FREERDP_VERSION_MAJOR >= 3
 	input = client->context->input;

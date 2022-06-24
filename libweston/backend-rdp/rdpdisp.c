@@ -201,7 +201,7 @@ disp_set_monitor_layout_change(freerdp_peer *client, struct rdp_monitor_mode *mo
 {
 	RdpPeerContext *peerCtx = (RdpPeerContext *)client->context;
 	struct rdp_backend *b = peerCtx->rdpBackend;
-	rdpSettings *settings = client->settings;
+	rdpSettings *settings = client->context->settings;
 	struct weston_output *output = NULL;
 	struct weston_head *head = NULL;
 	struct rdp_head *current;
@@ -530,7 +530,7 @@ disp_monitor_layout_change(DispServerContext* context, const DISPLAY_CONTROL_MON
 {
 	freerdp_peer *client = (freerdp_peer*)context->custom;
 	RdpPeerContext *peerCtx = (RdpPeerContext *)client->context;
-	rdpSettings *settings = client->settings;
+	rdpSettings *settings = client->context->settings;
 	struct rdp_backend *b = peerCtx->rdpBackend;
 	DISPLAY_CONTROL_MONITOR_LAYOUT *monitorLayout = displayControl->Monitors;
 	struct rdp_monitor_mode *monitorMode;
@@ -633,7 +633,7 @@ disp_client_monitor_layout_change(DispServerContext* context, const DISPLAY_CONT
 {
 	freerdp_peer *client = (freerdp_peer*)context->custom;
 	RdpPeerContext *peerCtx = (RdpPeerContext *)client->context;
-	rdpSettings *settings = client->settings;
+	rdpSettings *settings = client->context->settings;
 	struct rdp_backend *b = peerCtx->rdpBackend;
 	struct disp_schedule_monitor_layout_change_data *data;
 
@@ -663,7 +663,7 @@ xf_peer_adjust_monitor_layout(freerdp_peer* client)
 {
 	RdpPeerContext *peerCtx = (RdpPeerContext *)client->context;
 	struct rdp_backend *b = peerCtx->rdpBackend;
-	rdpSettings *settings = client->settings;
+	rdpSettings *settings = client->context->settings;
 	BOOL success = TRUE;
 
 	rdp_debug(b, "%s:\n", __func__);
