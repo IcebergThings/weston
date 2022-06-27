@@ -3,7 +3,6 @@ srcs_libshared = [
 	'option-parser.c',
 	'file-util.c',
 	'os-compatibility.c',
-	'xalloc.c',
 ]
 deps_libshared = dep_wayland_client
 
