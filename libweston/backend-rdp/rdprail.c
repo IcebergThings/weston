@@ -45,6 +45,7 @@
 #include "rdp.h"
 
 #include "libweston-internal.h"
+#include "shared/xalloc.h"
 
 #define RAIL_WINDOW_FULLSCREEN_STYLE (WS_POPUP | WS_VISIBLE | WS_CLIPSIBLINGS | WS_GROUP | WS_TABSTOP)
 #define RAIL_WINDOW_NORMAL_STYLE (RAIL_WINDOW_FULLSCREEN_STYLE | WS_THICKFRAME | WS_CAPTION)
@@ -2817,6 +2818,76 @@ rdp_rail_output_repaint(struct weston_output *output, pixman_region32_t *damage)
 			peerCtx->currentFrameId, peerCtx->acknowledgedFrameId, peerCtx->isAcknowledgedSuspended);
 	}
 	return;
+}
+
+struct disp_schedule_monitor_layout_change_data {
+	struct rdp_loop_task _base;
+	DispServerContext *context;
+	int count;
+	rdpMonitor *monitors;
+};
+
+static void
+disp_monitor_layout_change_callback(bool freeOnly, void *dataIn)
+{
+	struct disp_schedule_monitor_layout_change_data *data = wl_container_of(dataIn, data, _base);
+	DispServerContext *context = data->context;
+	freerdp_peer *client = (freerdp_peer *)context->custom;
+	RdpPeerContext *peerCtx = (RdpPeerContext *)client->context;
+	struct rdp_backend *b = peerCtx->rdpBackend;
+
+	assert_compositor_thread(b);
+
+	if (freeOnly)
+		goto out;
+
+	disp_monitor_layout_change(context, data->count, data->monitors);
+
+out:
+	free(data);
+	return;
+}
+
+static unsigned int
+disp_client_monitor_layout_change(DispServerContext *context, const DISPLAY_CONTROL_MONITOR_LAYOUT_PDU *display_control)
+{
+	freerdp_peer *client = (freerdp_peer*)context->custom;
+	RdpPeerContext *peerCtx = (RdpPeerContext *)client->context;
+	rdpSettings *settings = client->context->settings;
+	struct rdp_backend *b = peerCtx->rdpBackend;
+	struct disp_schedule_monitor_layout_change_data *data;
+	unsigned int i;
+
+	assert_not_compositor_thread(b);
+
+	rdp_debug(b, "Client: DisplayLayoutChange: monitor count:0x%x\n", display_control->NumMonitors);
+
+	assert(settings->HiDefRemoteApp);
+
+	data = xmalloc(sizeof(*data) + (sizeof(rdpMonitor) * display_control->NumMonitors));
+
+	data->context = context;
+	data->monitors = (rdpMonitor *)(data + 1);
+	data->count = display_control->NumMonitors;
+	for (i = 0; i < display_control->NumMonitors; i++) {
+		DISPLAY_CONTROL_MONITOR_LAYOUT *ml = &display_control->Monitors[i];
+
+		data->monitors[i].x = ml->Left;
+		data->monitors[i].y = ml->Top;
+		data->monitors[i].width = ml->Width;
+		data->monitors[i].height = ml->Height;
+		data->monitors[i].is_primary = !!(ml->Flags & DISPLAY_CONTROL_MONITOR_PRIMARY);
+		data->monitors[i].attributes.physicalWidth = ml->PhysicalWidth;
+		data->monitors[i].attributes.physicalHeight = ml->PhysicalHeight;
+		data->monitors[i].attributes.orientation = ml->Orientation;
+		data->monitors[i].attributes.desktopScaleFactor = ml->DesktopScaleFactor;
+		data->monitors[i].attributes.deviceScaleFactor = ml->DeviceScaleFactor;
+		data->monitors[i].orig_screen = 0;
+	}
+
+	rdp_dispatch_task_to_display_loop(peerCtx, disp_monitor_layout_change_callback, &data->_base);
+
+	return CHANNEL_RC_OK;
 }
 
 BOOL

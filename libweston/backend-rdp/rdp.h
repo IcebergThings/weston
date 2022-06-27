@@ -403,8 +403,11 @@ void rdp_rail_start_window_move(struct weston_surface* surface, int pointerGrabX
 void rdp_rail_end_window_move(struct weston_surface* surface);
 
 // rdpdisp.c
-UINT disp_client_monitor_layout_change(DispServerContext* context, const DISPLAY_CONTROL_MONITOR_LAYOUT_PDU* displayControl);
-BOOL xf_peer_adjust_monitor_layout(freerdp_peer* client);
+void
+disp_monitor_layout_change(DispServerContext* context, int monitor_count, rdpMonitor *monitors);
+
+bool
+handle_adjust_monitor_layout(freerdp_peer *client, int monitor_count, rdpMonitor *monitors);
 
 // rdpclip.c
 int rdp_clipboard_init(freerdp_peer* client);

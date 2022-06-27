@@ -39,6 +39,8 @@
 
 #include "rdp.h"
 
+#include "shared/xalloc.h"
+
 static BOOL
 is_line_intersected(int l1, int l2, int r1, int r2)
 {
@@ -525,60 +527,53 @@ disp_monitor_validate_and_compute_layout(RdpPeerContext *peerCtx, struct rdp_mon
 	return TRUE;
 }
 
-static void
-disp_monitor_layout_change(DispServerContext* context, const DISPLAY_CONTROL_MONITOR_LAYOUT_PDU* displayControl)
+void
+disp_monitor_layout_change(DispServerContext* context, int monitor_count, rdpMonitor *monitors)
 {
 	freerdp_peer *client = (freerdp_peer*)context->custom;
 	RdpPeerContext *peerCtx = (RdpPeerContext *)client->context;
 	rdpSettings *settings = client->context->settings;
 	struct rdp_backend *b = peerCtx->rdpBackend;
-	DISPLAY_CONTROL_MONITOR_LAYOUT *monitorLayout = displayControl->Monitors;
 	struct rdp_monitor_mode *monitorMode;
 	MONITOR_DEF *resetMonitorDef;
 
 	assert_compositor_thread(b);
 
-	rdp_debug(b, "Client: DisplayControl: monitor count:0x%x\n", displayControl->NumMonitors);
+	rdp_debug(b, "Client: DisplayControl: monitor count:0x%x\n", monitor_count);
 
 	assert(settings->HiDefRemoteApp);
 
-	if (displayControl->NumMonitors > RDP_MAX_MONITOR) {
+	if (monitor_count > RDP_MAX_MONITOR) {
 		rdp_debug_error(b, "\nWARNING\nWARNING\nWARNING: client reports more monitors then expected:(%d)\nWARNING\nWARNING\n",
-			displayControl->NumMonitors);
+				monitor_count);
 		return;
 	}
 
-	monitorMode = malloc(sizeof(struct rdp_monitor_mode) * displayControl->NumMonitors);
-	if (!monitorMode)
-		return;
-	resetMonitorDef = malloc(sizeof(MONITOR_DEF) * displayControl->NumMonitors);
+	monitorMode = xmalloc(sizeof(struct rdp_monitor_mode) * monitor_count);
+	resetMonitorDef = malloc(sizeof(MONITOR_DEF) * monitor_count);
 	if (!resetMonitorDef) {
 		free(monitorMode);
 		return;
 	}
 
-	for (UINT i = 0; i < displayControl->NumMonitors; i++, monitorLayout++) {
-		monitorMode[i].monitorDef.x = resetMonitorDef[i].left = monitorLayout->Left;
-		monitorMode[i].monitorDef.y = resetMonitorDef[i].top = monitorLayout->Top;
-		monitorMode[i].monitorDef.width = resetMonitorDef[i].right = monitorLayout->Width;
-		monitorMode[i].monitorDef.height = resetMonitorDef[i].bottom = monitorLayout->Height;
-		monitorMode[i].monitorDef.is_primary = resetMonitorDef[i].flags = monitorLayout->Flags & DISPLAY_CONTROL_MONITOR_PRIMARY ? 1 : 0;
+	for (int i = 0; i < monitor_count; i++) {
+		monitorMode[i].monitorDef = monitors[i];
+		resetMonitorDef[i].left = monitors[i].x;
+		resetMonitorDef[i].top = monitors[i].y;
+		resetMonitorDef[i].right = monitors[i].width;
+		resetMonitorDef[i].bottom = monitors[i].height;
+		resetMonitorDef[i].flags = monitors[i].is_primary;
 		monitorMode[i].monitorDef.orig_screen = 0;
-		monitorMode[i].monitorDef.attributes.physicalWidth = monitorLayout->PhysicalWidth;
-		monitorMode[i].monitorDef.attributes.physicalHeight = monitorLayout->PhysicalHeight;
-		monitorMode[i].monitorDef.attributes.orientation = monitorLayout->Orientation;
-		monitorMode[i].monitorDef.attributes.desktopScaleFactor = monitorLayout->DesktopScaleFactor;
-		monitorMode[i].monitorDef.attributes.deviceScaleFactor = monitorLayout->DeviceScaleFactor;
 		monitorMode[i].scale = disp_get_output_scale_from_monitor(peerCtx, &monitorMode[i]);
 		monitorMode[i].clientScale = disp_get_client_scale_from_monitor(peerCtx, &monitorMode[i]);
 	}
 
-	if (!disp_monitor_validate_and_compute_layout(peerCtx, monitorMode, displayControl->NumMonitors))
+	if (!disp_monitor_validate_and_compute_layout(peerCtx, monitorMode, monitor_count))
 		goto Exit;
 
 	int doneIndex = 0;
-	disp_start_monitor_layout_change(client, monitorMode, displayControl->NumMonitors, &doneIndex);
-	for (UINT i = 0; i < displayControl->NumMonitors; i++) {
+	disp_start_monitor_layout_change(client, monitorMode, monitor_count, &doneIndex);
+	for (int i = 0; i < monitor_count; i++) {
 		if ((doneIndex & (1 << i)) == 0) {
 			if (disp_set_monitor_layout_change(client, &monitorMode[i]) != 0)
 				goto Exit;
@@ -590,7 +585,7 @@ disp_monitor_layout_change(DispServerContext* context, const DISPLAY_CONTROL_MON
 	RDPGFX_RESET_GRAPHICS_PDU resetGraphics = {};
 	resetGraphics.width = peerCtx->regionClientHeads.extents.x2 - peerCtx->regionClientHeads.extents.x1;
 	resetGraphics.height = peerCtx->regionClientHeads.extents.y2 - peerCtx->regionClientHeads.extents.x1;
-	resetGraphics.monitorCount = displayControl->NumMonitors;
+	resetGraphics.monitorCount = monitor_count;
 	resetGraphics.monitorDefArray = resetMonitorDef;
 	peerCtx->rail_grfx_server_context->ResetGraphics(peerCtx->rail_grfx_server_context, &resetGraphics);
 
@@ -604,148 +599,42 @@ Exit:
 	return;
 }
 
-struct disp_schedule_monitor_layout_change_data {
-	struct rdp_loop_task _base;
-	DispServerContext* context;
-	DISPLAY_CONTROL_MONITOR_LAYOUT_PDU displayControl;
-};
-
-static void
-disp_monitor_layout_change_callback(bool freeOnly, void* dataIn)
-{
-	struct disp_schedule_monitor_layout_change_data *data = wl_container_of(dataIn, data, _base);
-	DispServerContext* context = data->context;
-	freerdp_peer *client = (freerdp_peer*)context->custom;
-	RdpPeerContext *peerCtx = (RdpPeerContext *)client->context;
-
-	assert_compositor_thread(peerCtx->rdpBackend);
-
-	if (!freeOnly)
-		disp_monitor_layout_change(context, &data->displayControl);
-
-	free(data);
-
-	return;
-}
-
-UINT
-disp_client_monitor_layout_change(DispServerContext* context, const DISPLAY_CONTROL_MONITOR_LAYOUT_PDU* displayControl)
-{
-	freerdp_peer *client = (freerdp_peer*)context->custom;
-	RdpPeerContext *peerCtx = (RdpPeerContext *)client->context;
-	rdpSettings *settings = client->context->settings;
-	struct rdp_backend *b = peerCtx->rdpBackend;
-	struct disp_schedule_monitor_layout_change_data *data;
-
-	assert_not_compositor_thread(b);
-
-	rdp_debug(b, "Client: DisplayLayoutChange: monitor count:0x%x\n", displayControl->NumMonitors);
-
-	assert(settings->HiDefRemoteApp);
-
-	data = malloc(sizeof(*data) + (sizeof(DISPLAY_CONTROL_MONITOR_LAYOUT) * displayControl->NumMonitors));
-	if (!data)
-		return ERROR_INTERNAL_ERROR;  
-
-	data->context = context;
-	data->displayControl = *displayControl;
-	data->displayControl.Monitors = (DISPLAY_CONTROL_MONITOR_LAYOUT*)(data+1);
-	memcpy(data->displayControl.Monitors, displayControl->Monitors,
-		sizeof(DISPLAY_CONTROL_MONITOR_LAYOUT) * displayControl->NumMonitors);
-
-	rdp_dispatch_task_to_display_loop(peerCtx, disp_monitor_layout_change_callback, &data->_base);
-
-	return 0;
-}
-
-BOOL
-xf_peer_adjust_monitor_layout(freerdp_peer* client)
+bool
+handle_adjust_monitor_layout(freerdp_peer *client, int monitor_count, rdpMonitor *monitors)
 {
 	RdpPeerContext *peerCtx = (RdpPeerContext *)client->context;
-	struct rdp_backend *b = peerCtx->rdpBackend;
-	rdpSettings *settings = client->context->settings;
-	BOOL success = TRUE;
-
-	rdp_debug(b, "%s:\n", __func__);
-	rdp_debug(b, "  DesktopWidth:%d, DesktopHeight:%d\n", settings->DesktopWidth, settings->DesktopHeight);
-	rdp_debug(b, "  UseMultimon:%d\n", settings->UseMultimon); 
-	rdp_debug(b, "  ForceMultimon:%d\n", settings->ForceMultimon);
-	rdp_debug(b, "  MonitorCount:%d\n", settings->MonitorCount);
-	rdp_debug(b, "  HasMonitorAttributes:%d\n", settings->HasMonitorAttributes);
-	rdp_debug(b, "  HiDefRemoteApp:%d\n", settings->HiDefRemoteApp);
-
-	/* these settings must have no impact in RAIL mode */
-	/* In RAIL mode, it must mirror client's monitor settings */
-	/* If not in RAIL mode, or RAIL-shell is not used, only signle mon is allowed */
-	if (!settings->HiDefRemoteApp || b->rdprail_shell_api == NULL) {
-	 	if (settings->MonitorCount > 1) {
-			rdp_debug_error(b, "\nWARNING\nWARNING\nWARNING: multiple monitor is not supported in non HiDef RAIL mode\nWARNING\nWARNING\n");
-			return FALSE;
-		}
-	}
-	if (settings->MonitorCount > RDP_MAX_MONITOR) {
-		rdp_debug_error(b, "\nWARNING\nWARNING\nWARNING: client reports more monitors then expected:(%d)\nWARNING\nWARNING\n",
-			settings->MonitorCount);
-		return FALSE;
-	}
-	struct rdp_monitor_mode _monitorMode = {};
+	bool success = true;
 	struct rdp_monitor_mode *monitorMode = NULL;
-	UINT32 monitorCount;
-	if (settings->MonitorCount > 0 && settings->MonitorDefArray) {
-		rdpMonitor *rdp_monitor = settings->MonitorDefArray;
-		monitorCount = settings->MonitorCount;
-		monitorMode = malloc(sizeof(struct rdp_monitor_mode) * monitorCount);
-		if (!monitorMode)
-			return FALSE;
-		for (UINT32 i = 0; i < monitorCount; i++) {
-			monitorMode[i].monitorDef = rdp_monitor[i];
-			if (!settings->HasMonitorAttributes) {
-				monitorMode[i].monitorDef.attributes.physicalWidth = 0;
-				monitorMode[i].monitorDef.attributes.physicalHeight = 0;
-				monitorMode[i].monitorDef.attributes.orientation = ORIENTATION_LANDSCAPE;
-				monitorMode[i].monitorDef.attributes.desktopScaleFactor = 100;
-				monitorMode[i].monitorDef.attributes.deviceScaleFactor = 100;
-			}
-			monitorMode[i].scale = disp_get_output_scale_from_monitor(peerCtx, &monitorMode[i]);
-			monitorMode[i].clientScale = disp_get_client_scale_from_monitor(peerCtx, &monitorMode[i]);
-		}
-	} else {
-		/* when no monitor array provided, generate from desktop settings */
-		_monitorMode.monitorDef.x = 0; // settings->DesktopPosX;
-		_monitorMode.monitorDef.y = 0; // settings->DesktopPosY;
-		_monitorMode.monitorDef.width = settings->DesktopWidth;
-		_monitorMode.monitorDef.height = settings->DesktopHeight;
-		_monitorMode.monitorDef.is_primary = 1;
-		_monitorMode.monitorDef.attributes.physicalWidth = settings->DesktopPhysicalWidth;
-		_monitorMode.monitorDef.attributes.physicalHeight = settings->DesktopPhysicalHeight;
-		_monitorMode.monitorDef.attributes.orientation = settings->DesktopOrientation;
-		_monitorMode.monitorDef.attributes.desktopScaleFactor = settings->DesktopScaleFactor;
-		_monitorMode.monitorDef.attributes.deviceScaleFactor = settings->DeviceScaleFactor;
-		_monitorMode.scale = disp_get_output_scale_from_monitor(peerCtx, &_monitorMode);
-		_monitorMode.clientScale = disp_get_client_scale_from_monitor(peerCtx, &_monitorMode);
-		monitorCount = 1;
-		monitorMode = &_monitorMode;
+	int i;
+
+	monitorMode = malloc(sizeof(struct rdp_monitor_mode) * monitor_count);
+	if (!monitorMode)
+		return true;
+
+	for (i = 0; i < monitor_count; i++) {
+		monitorMode[i].monitorDef = monitors[i];
+		monitorMode[i].scale = disp_get_output_scale_from_monitor(peerCtx, &monitorMode[i]);
+		monitorMode[i].clientScale = disp_get_client_scale_from_monitor(peerCtx, &monitorMode[i]);
 	}
 
-	if (!disp_monitor_validate_and_compute_layout(peerCtx, monitorMode, monitorCount)) {
-		success = FALSE;
-		goto Exit;
+	if (!disp_monitor_validate_and_compute_layout(peerCtx, monitorMode, monitor_count)) {
+		success = true;
+		goto exit;
 	}
 
 	int doneIndex = 0;
-	disp_start_monitor_layout_change(client, monitorMode, monitorCount, &doneIndex);
-	for (UINT32 i = 0; i < monitorCount; i++) {
+	disp_start_monitor_layout_change(client, monitorMode, monitor_count, &doneIndex);
+	for (int i = 0; i < monitor_count; i++) {
 		if ((doneIndex & (1 << i)) == 0)
 			if (disp_set_monitor_layout_change(client, &monitorMode[i]) != 0) {
-				success = FALSE;
-				goto Exit;
+				success = true;
+				goto exit;
 			}
 	}
 	disp_end_monitor_layout_change(client);
 
-Exit:
-	if (monitorMode != &_monitorMode)
-		free(monitorMode);
+exit:
+	free(monitorMode);
 
 	return success;
 }

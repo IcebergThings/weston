@@ -56,6 +56,7 @@
 #include <libweston/libweston.h>
 #include <libweston/backend-rdp.h>
 #include "pixman-renderer.h"
+#include "shared/xalloc.h"
 
 #if HAVE_OPENSSL
 /* for session certificate generation */
@@ -68,6 +69,9 @@
 #endif
 
 extern PWtsApiFunctionTable FreeRDP_InitWtsApi(void);
+
+static BOOL
+xf_peer_adjust_monitor_layout(freerdp_peer *client);
 
 static void
 rdp_peer_seat_led_update(struct weston_seat *seat_base, enum weston_led leds)
@@ -1815,6 +1819,76 @@ xf_suppress_output(rdpContext *context, BYTE allow, const RECTANGLE_16 *area)
 		peerContext->item.flags &= (~RDP_PEER_OUTPUT_ENABLED);
 
 	return TRUE;
+}
+
+static BOOL
+xf_peer_adjust_monitor_layout(freerdp_peer *client)
+{
+	RdpPeerContext *peerCtx = (RdpPeerContext *)client->context;
+	struct rdp_backend *b = peerCtx->rdpBackend;
+	rdpSettings *settings = client->context->settings;
+	rdpMonitor *monitors;
+	unsigned int monitor_count;
+	BOOL success;
+	unsigned int i;
+
+	rdp_debug(b, "%s:\n", __func__);
+	rdp_debug(b, "  DesktopWidth:%d, DesktopHeight:%d\n", settings->DesktopWidth, settings->DesktopHeight);
+	rdp_debug(b, "  UseMultimon:%d\n", settings->UseMultimon);
+	rdp_debug(b, "  ForceMultimon:%d\n", settings->ForceMultimon);
+	rdp_debug(b, "  MonitorCount:%d\n", settings->MonitorCount);
+	rdp_debug(b, "  HasMonitorAttributes:%d\n", settings->HasMonitorAttributes);
+	rdp_debug(b, "  HiDefRemoteApp:%d\n", settings->HiDefRemoteApp);
+
+	/* these settings must have no impact in RAIL mode */
+	/* In RAIL mode, it must mirror client's monitor settings */
+	/* If not in RAIL mode, or RAIL-shell is not used, only signle mon is allowed */
+	if (!settings->HiDefRemoteApp || b->rdprail_shell_api == NULL) {
+		if (settings->MonitorCount > 1) {
+			rdp_debug_error(b, "\nWARNING\nWARNING\nWARNING: multiple monitor is not supported in non HiDef RAIL mode\nWARNING\nWARNING\n");
+			return FALSE;
+		}
+	}
+	if (settings->MonitorCount > RDP_MAX_MONITOR) {
+		rdp_debug_error(b, "\nWARNING\nWARNING\nWARNING: client reports more monitors then expected:(%d)\nWARNING\nWARNING\n",
+				settings->MonitorCount);
+		return FALSE;
+	}
+
+	if (settings->MonitorCount > 0 && settings->MonitorDefArray) {
+		rdpMonitor *rdp_monitor = settings->MonitorDefArray;
+		monitor_count = settings->MonitorCount;
+		monitors = xmalloc(sizeof(*monitors) * monitor_count);
+		for (i = 0; i < monitor_count; i++) {
+			monitors[i] = rdp_monitor[i];
+			if (!settings->HasMonitorAttributes) {
+				monitors[i].attributes.physicalWidth = 0;
+				monitors[i].attributes.physicalHeight = 0;
+				monitors[i].attributes.orientation = ORIENTATION_LANDSCAPE;
+				monitors[i].attributes.desktopScaleFactor = 100;
+				monitors[i].attributes.deviceScaleFactor = 100;
+			}
+		}
+	} else {
+		monitor_count = 1;
+		monitors = xmalloc(sizeof(*monitors) * monitor_count);
+		/* when no monitor array provided, generate from desktop settings */
+		monitors[0].x = 0; // settings->DesktopPosX;
+		monitors[0].y = 0; // settings->DesktopPosY;
+		monitors[0].width = settings->DesktopWidth;
+		monitors[0].height = settings->DesktopHeight;
+		monitors[0].is_primary = 1;
+		monitors[0].attributes.physicalWidth = settings->DesktopPhysicalWidth;
+		monitors[0].attributes.physicalHeight = settings->DesktopPhysicalHeight;
+		monitors[0].attributes.orientation = settings->DesktopOrientation;
+		monitors[0].attributes.desktopScaleFactor = settings->DesktopScaleFactor;
+		monitors[0].attributes.deviceScaleFactor = settings->DeviceScaleFactor;
+		monitors[0].orig_screen = 0;
+	}
+	success = handle_adjust_monitor_layout(client, monitor_count, monitors);
+
+	free(monitors);
+	return success;
 }
 
 static BOOL
