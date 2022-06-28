@@ -2820,6 +2820,16 @@ rdp_rail_output_repaint(struct weston_output *output, pixman_region32_t *damage)
 	return;
 }
 
+static void
+disp_force_recreate_iter(void *element, void *data)
+{
+	struct weston_surface *surface = element;
+	struct weston_surface_rail_state *rail_state = surface->backend_state;
+
+	rail_state->forceRecreateSurface = TRUE;
+	rail_state->forceUpdateWindowState = TRUE;
+}
+
 struct disp_schedule_monitor_layout_change_data {
 	struct rdp_loop_task _base;
 	DispServerContext *context;
@@ -2835,15 +2845,40 @@ disp_monitor_layout_change_callback(bool freeOnly, void *dataIn)
 	freerdp_peer *client = (freerdp_peer *)context->custom;
 	RdpPeerContext *peerCtx = (RdpPeerContext *)client->context;
 	struct rdp_backend *b = peerCtx->rdpBackend;
+	RDPGFX_RESET_GRAPHICS_PDU reset_graphics = {};
+	MONITOR_DEF *reset_monitor_def;
 
 	assert_compositor_thread(b);
 
 	if (freeOnly)
 		goto out;
 
-	disp_monitor_layout_change(context, data->count, data->monitors);
+	/* Skip reset graphics on failure */
+	if (!disp_monitor_layout_change(context, data->count, data->monitors))
+		goto out;
 
+	reset_monitor_def = xmalloc(sizeof(MONITOR_DEF) * data->count);
+
+	for (int i = 0; i < data->count; i++) {
+		reset_monitor_def[i].left = data->monitors[i].x;
+		reset_monitor_def[i].top = data->monitors[i].y;
+		reset_monitor_def[i].right = data->monitors[i].width;
+		reset_monitor_def[i].bottom = data->monitors[i].height;
+		reset_monitor_def[i].flags = data->monitors[i].is_primary;
+        }
+
+	/* tell client the server updated the monitor layout */
+	reset_graphics.width = peerCtx->regionClientHeads.extents.x2 - peerCtx->regionClientHeads.extents.x1;
+	reset_graphics.height = peerCtx->regionClientHeads.extents.y2 - peerCtx->regionClientHeads.extents.x1;
+	reset_graphics.monitorCount = data->count;
+	reset_graphics.monitorDefArray = reset_monitor_def;
+	peerCtx->rail_grfx_server_context->ResetGraphics(peerCtx->rail_grfx_server_context, &reset_graphics);
+
+	/* force recreate all surface and redraw. */
+	rdp_id_manager_for_each(&peerCtx->windowId, disp_force_recreate_iter, NULL);
+	weston_compositor_damage_all(b->compositor);
 out:
+	free(reset_monitor_def);
 	free(data);
 	return;
 }

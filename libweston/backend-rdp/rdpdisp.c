@@ -336,15 +336,6 @@ disp_set_monitor_layout_change(freerdp_peer *client, struct rdp_monitor_mode *mo
 	return 0;
 }
 
-static void
-disp_force_recreate_iter(void *element, void *data)
-{
-	struct weston_surface *surface = (struct weston_surface *)element;
-	struct weston_surface_rail_state *rail_state = (struct weston_surface_rail_state *)surface->backend_state;
-	rail_state->forceRecreateSurface = TRUE;
-	rail_state->forceUpdateWindowState = TRUE;
-}
-
 static BOOL
 disp_monitor_validate_and_compute_layout(RdpPeerContext *peerCtx, struct rdp_monitor_mode *monitorMode, UINT32 monitorCount)
 {
@@ -527,7 +518,7 @@ disp_monitor_validate_and_compute_layout(RdpPeerContext *peerCtx, struct rdp_mon
 	return TRUE;
 }
 
-void
+bool
 disp_monitor_layout_change(DispServerContext* context, int monitor_count, rdpMonitor *monitors)
 {
 	freerdp_peer *client = (freerdp_peer*)context->custom;
@@ -535,7 +526,7 @@ disp_monitor_layout_change(DispServerContext* context, int monitor_count, rdpMon
 	rdpSettings *settings = client->context->settings;
 	struct rdp_backend *b = peerCtx->rdpBackend;
 	struct rdp_monitor_mode *monitorMode;
-	MONITOR_DEF *resetMonitorDef;
+	bool success = true;
 
 	assert_compositor_thread(b);
 
@@ -546,57 +537,37 @@ disp_monitor_layout_change(DispServerContext* context, int monitor_count, rdpMon
 	if (monitor_count > RDP_MAX_MONITOR) {
 		rdp_debug_error(b, "\nWARNING\nWARNING\nWARNING: client reports more monitors then expected:(%d)\nWARNING\nWARNING\n",
 				monitor_count);
-		return;
+		return false;
 	}
 
 	monitorMode = xmalloc(sizeof(struct rdp_monitor_mode) * monitor_count);
-	resetMonitorDef = malloc(sizeof(MONITOR_DEF) * monitor_count);
-	if (!resetMonitorDef) {
-		free(monitorMode);
-		return;
-	}
 
 	for (int i = 0; i < monitor_count; i++) {
 		monitorMode[i].monitorDef = monitors[i];
-		resetMonitorDef[i].left = monitors[i].x;
-		resetMonitorDef[i].top = monitors[i].y;
-		resetMonitorDef[i].right = monitors[i].width;
-		resetMonitorDef[i].bottom = monitors[i].height;
-		resetMonitorDef[i].flags = monitors[i].is_primary;
 		monitorMode[i].monitorDef.orig_screen = 0;
 		monitorMode[i].scale = disp_get_output_scale_from_monitor(peerCtx, &monitorMode[i]);
 		monitorMode[i].clientScale = disp_get_client_scale_from_monitor(peerCtx, &monitorMode[i]);
 	}
 
-	if (!disp_monitor_validate_and_compute_layout(peerCtx, monitorMode, monitor_count))
+	if (!disp_monitor_validate_and_compute_layout(peerCtx, monitorMode, monitor_count)) {
+		success = false;
 		goto Exit;
-
+	}
 	int doneIndex = 0;
 	disp_start_monitor_layout_change(client, monitorMode, monitor_count, &doneIndex);
 	for (int i = 0; i < monitor_count; i++) {
 		if ((doneIndex & (1 << i)) == 0) {
-			if (disp_set_monitor_layout_change(client, &monitorMode[i]) != 0)
+			if (disp_set_monitor_layout_change(client, &monitorMode[i]) != 0) {
+				success = false;
 				goto Exit;
+			}
 		}
 	}
 	disp_end_monitor_layout_change(client);
 
-	/* tell client the server updated the monitor layout */
-	RDPGFX_RESET_GRAPHICS_PDU resetGraphics = {};
-	resetGraphics.width = peerCtx->regionClientHeads.extents.x2 - peerCtx->regionClientHeads.extents.x1;
-	resetGraphics.height = peerCtx->regionClientHeads.extents.y2 - peerCtx->regionClientHeads.extents.x1;
-	resetGraphics.monitorCount = monitor_count;
-	resetGraphics.monitorDefArray = resetMonitorDef;
-	peerCtx->rail_grfx_server_context->ResetGraphics(peerCtx->rail_grfx_server_context, &resetGraphics);
-
-	/* force recreate all surface and redraw. */
-	rdp_id_manager_for_each(&peerCtx->windowId, disp_force_recreate_iter, NULL);
-	weston_compositor_damage_all(b->compositor);
-
 Exit:
 	free(monitorMode);
-	free(resetMonitorDef);
-	return;
+	return success;
 }
 
 bool

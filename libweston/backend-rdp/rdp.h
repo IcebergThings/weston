@@ -403,7 +403,7 @@ void rdp_rail_start_window_move(struct weston_surface* surface, int pointerGrabX
 void rdp_rail_end_window_move(struct weston_surface* surface);
 
 // rdpdisp.c
-void
+bool
 disp_monitor_layout_change(DispServerContext* context, int monitor_count, rdpMonitor *monitors);
 
 bool
