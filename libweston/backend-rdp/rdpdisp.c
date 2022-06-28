@@ -556,3 +556,87 @@ exit:
 
 	return success;
 }
+
+static inline void
+to_weston_scale_only(RdpPeerContext *peer, struct weston_output *output, float scale, int *x, int *y)
+{
+	//rdp_matrix_transform_scale(&output->inverse_matrix, x, y);
+	/* TODO: built-in to matrix */
+	*x = (float)(*x) * scale;
+	*y = (float)(*y) * scale;
+}
+
+/* Input x/y in client space, output x/y in weston space */
+struct weston_output *
+to_weston_coordinate(RdpPeerContext *peerContext, int32_t *x, int32_t *y, uint32_t *width, uint32_t *height)
+{
+	struct rdp_backend *b = peerContext->rdpBackend;
+	int sx = *x, sy = *y;
+	struct rdp_head *head_iter;
+
+	/* First, find which monitor contains this x/y. */
+	wl_list_for_each(head_iter, &b->head_list, link) {
+		if (pixman_region32_contains_point(&head_iter->regionClient, sx, sy, NULL)) {
+			struct weston_output *output = head_iter->base.output;
+			float scale = 1.0f / head_iter->monitorMode.clientScale;
+
+			/* translate x/y to offset from this output on client space. */
+			sx -= head_iter->monitorMode.monitorDef.x;
+			sy -= head_iter->monitorMode.monitorDef.y;
+			/* scale x/y to client output space. */
+			to_weston_scale_only(peerContext, output, scale, &sx, &sy);
+			if (width && height)
+				to_weston_scale_only(peerContext, output, scale, width, height);
+			/* translate x/y to offset from this output on weston space. */
+			sx += head_iter->monitorMode.rectWeston.x;
+			sy += head_iter->monitorMode.rectWeston.y;
+			rdp_debug_verbose(b, "%s: (x:%d, y:%d) -> (sx:%d, sy:%d) at head:%s\n",
+					  __func__, *x, *y, sx, sy, head_iter->base.name);
+			*x = sx;
+			*y = sy;
+			return output; // must be only 1 head per output.
+		}
+	}
+	/* x/y is outside of any monitors. */
+	return NULL;
+}
+
+static inline void
+to_client_scale_only(RdpPeerContext *peer, struct weston_output *output, float scale, int *x, int *y)
+{
+	//rdp_matrix_transform_scale(&output->matrix, x, y);
+	/* TODO: built-in to matrix */
+	*x = (float)(*x) * scale;
+	*y = (float)(*y) * scale;
+}
+
+/* Input x/y in weston space, output x/y in client space */
+void
+to_client_coordinate(RdpPeerContext *peerContext, struct weston_output *output, int32_t *x, int32_t *y, uint32_t *width, uint32_t *height)
+{
+	struct rdp_backend *b = peerContext->rdpBackend;
+	int sx = *x, sy = *y;
+	struct weston_head *head_iter;
+
+	/* Pick first head from output. */
+	wl_list_for_each(head_iter, &output->head_list, output_link) {
+		struct rdp_head *head = to_rdp_head(head_iter);
+		float scale = head->monitorMode.clientScale;
+
+		/* translate x/y to offset from this output on weston space. */
+		sx -= head->monitorMode.rectWeston.x;
+		sy -= head->monitorMode.rectWeston.y;
+		/* scale x/y to client output space. */
+		to_client_scale_only(peerContext, output, scale, &sx, &sy);
+		if (width && height)
+			to_client_scale_only(peerContext, output, scale, width, height);
+		/* translate x/y to offset from this output on client space. */
+		sx += head->monitorMode.monitorDef.x;
+		sy += head->monitorMode.monitorDef.y;
+		rdp_debug_verbose(b, "%s: (x:%d, y:%d) -> (sx:%d, sy:%d) at head:%s\n",
+				  __func__, *x, *y, sx, sy, head_iter->name);
+		*x = sx;
+		*y = sy;
+		return; // must be only 1 head per output.
+	}
+}
