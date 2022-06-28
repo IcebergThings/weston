@@ -2854,7 +2854,7 @@ disp_monitor_layout_change_callback(bool freeOnly, void *dataIn)
 		goto out;
 
 	/* Skip reset graphics on failure */
-	if (!disp_monitor_layout_change(context, data->count, data->monitors))
+	if (!handle_adjust_monitor_layout(client, data->count, data->monitors))
 		goto out;
 
 	reset_monitor_def = xmalloc(sizeof(MONITOR_DEF) * data->count);

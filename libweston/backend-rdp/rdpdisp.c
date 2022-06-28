@@ -519,58 +519,6 @@ disp_monitor_validate_and_compute_layout(RdpPeerContext *peerCtx, struct rdp_mon
 }
 
 bool
-disp_monitor_layout_change(DispServerContext* context, int monitor_count, rdpMonitor *monitors)
-{
-	freerdp_peer *client = (freerdp_peer*)context->custom;
-	RdpPeerContext *peerCtx = (RdpPeerContext *)client->context;
-	rdpSettings *settings = client->context->settings;
-	struct rdp_backend *b = peerCtx->rdpBackend;
-	struct rdp_monitor_mode *monitorMode;
-	bool success = true;
-
-	assert_compositor_thread(b);
-
-	rdp_debug(b, "Client: DisplayControl: monitor count:0x%x\n", monitor_count);
-
-	assert(settings->HiDefRemoteApp);
-
-	if (monitor_count > RDP_MAX_MONITOR) {
-		rdp_debug_error(b, "\nWARNING\nWARNING\nWARNING: client reports more monitors then expected:(%d)\nWARNING\nWARNING\n",
-				monitor_count);
-		return false;
-	}
-
-	monitorMode = xmalloc(sizeof(struct rdp_monitor_mode) * monitor_count);
-
-	for (int i = 0; i < monitor_count; i++) {
-		monitorMode[i].monitorDef = monitors[i];
-		monitorMode[i].monitorDef.orig_screen = 0;
-		monitorMode[i].scale = disp_get_output_scale_from_monitor(peerCtx, &monitorMode[i]);
-		monitorMode[i].clientScale = disp_get_client_scale_from_monitor(peerCtx, &monitorMode[i]);
-	}
-
-	if (!disp_monitor_validate_and_compute_layout(peerCtx, monitorMode, monitor_count)) {
-		success = false;
-		goto Exit;
-	}
-	int doneIndex = 0;
-	disp_start_monitor_layout_change(client, monitorMode, monitor_count, &doneIndex);
-	for (int i = 0; i < monitor_count; i++) {
-		if ((doneIndex & (1 << i)) == 0) {
-			if (disp_set_monitor_layout_change(client, &monitorMode[i]) != 0) {
-				success = false;
-				goto Exit;
-			}
-		}
-	}
-	disp_end_monitor_layout_change(client);
-
-Exit:
-	free(monitorMode);
-	return success;
-}
-
-bool
 handle_adjust_monitor_layout(freerdp_peer *client, int monitor_count, rdpMonitor *monitors)
 {
 	RdpPeerContext *peerCtx = (RdpPeerContext *)client->context;
@@ -578,12 +526,11 @@ handle_adjust_monitor_layout(freerdp_peer *client, int monitor_count, rdpMonitor
 	struct rdp_monitor_mode *monitorMode = NULL;
 	int i;
 
-	monitorMode = malloc(sizeof(struct rdp_monitor_mode) * monitor_count);
-	if (!monitorMode)
-		return true;
+	monitorMode = xmalloc(sizeof(struct rdp_monitor_mode) * monitor_count);
 
 	for (i = 0; i < monitor_count; i++) {
 		monitorMode[i].monitorDef = monitors[i];
+		monitorMode[i].monitorDef.orig_screen = 0;
 		monitorMode[i].scale = disp_get_output_scale_from_monitor(peerCtx, &monitorMode[i]);
 		monitorMode[i].clientScale = disp_get_client_scale_from_monitor(peerCtx, &monitorMode[i]);
 	}

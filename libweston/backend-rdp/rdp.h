@@ -404,9 +404,6 @@ void rdp_rail_end_window_move(struct weston_surface* surface);
 
 // rdpdisp.c
 bool
-disp_monitor_layout_change(DispServerContext* context, int monitor_count, rdpMonitor *monitors);
-
-bool
 handle_adjust_monitor_layout(freerdp_peer *client, int monitor_count, rdpMonitor *monitors);
 
 // rdpclip.c
