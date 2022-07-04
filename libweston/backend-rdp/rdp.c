@@ -280,7 +280,7 @@ rdp_output_repaint(struct weston_output *output_base, pixman_region32_t *damage,
 {
 	struct rdp_output *output = container_of(output_base, struct rdp_output, base);
 	struct weston_compositor *ec = output->base.compositor;
-	struct rdp_peers_item *outputPeer;
+	struct rdp_peers_item *peer;
 	struct rdp_backend *b = to_rdp_backend(ec);
 
 	/* Calculate the time we should complete this frame such that frames
@@ -315,13 +315,10 @@ rdp_output_repaint(struct weston_output *output_base, pixman_region32_t *damage,
 						  output_base->transform,
 						  output_base->current_scale,
 						  damage, &transformed_damage);
-			/* note: if this code really need to walk peers in HiDef mode,     */
-			/*       it must walk from output_default in backend, in non-HiDef */
-			/*       there must be only one default output, so doesn't matter. */
-			wl_list_for_each(outputPeer, &output->peers, link) {
-				if ((outputPeer->flags & RDP_PEER_ACTIVATED) &&
-					(outputPeer->flags & RDP_PEER_OUTPUT_ENABLED))
-					rdp_peer_refresh_region(&transformed_damage, outputPeer->peer);
+			wl_list_for_each(peer, &b->peers, link) {
+				if ((peer->flags & RDP_PEER_ACTIVATED) &&
+					(peer->flags & RDP_PEER_OUTPUT_ENABLED))
+					rdp_peer_refresh_region(&transformed_damage, peer->peer);
 			}
 			pixman_region32_fini(&transformed_damage);
 		}
@@ -427,7 +424,7 @@ rdp_switch_mode(struct weston_output *output, struct weston_mode *target_mode)
 		pixman_image_unref(rdpOutput->shadow_surface);
 		rdpOutput->shadow_surface = new_shadow_buffer;
 
-		wl_list_for_each(rdpPeer, &rdpBackend->output_default->peers, link) {
+		wl_list_for_each(rdpPeer, &rdpBackend->peers, link) {
 			settings = rdpPeer->peer->context->settings;
 			if (settings->DesktopWidth == (UINT32)target_mode->width &&
 					settings->DesktopHeight == (UINT32)target_mode->height)
@@ -516,8 +513,6 @@ rdp_output_set_size(struct weston_output *base,
 			break; // only one head per output in HiDef.
 		}
 	}
-
-	wl_list_init(&output->peers);
 
 	initMode.flags = WL_OUTPUT_MODE_CURRENT | WL_OUTPUT_MODE_PREFERRED;
 	initMode.width = width;
@@ -751,7 +746,7 @@ rdp_destroy(struct weston_compositor *ec)
 	int i;
 
 	if (b->output_default) {
-		wl_list_for_each_safe(rdp_peer, tmp, &b->output_default->peers, link) {
+		wl_list_for_each_safe(rdp_peer, tmp, &b->peers, link) {
 			freerdp_peer* client = rdp_peer->peer;
 
 			client->Disconnect(client);
@@ -2009,9 +2004,7 @@ rdp_peer_init(freerdp_peer *client, struct rdp_backend *b)
 	if (!b->rdp_peer)
 		b->rdp_peer = client;
 
-	/* chain peers at default_output */
-	if (b->output_default)
-		wl_list_insert(&b->output_default->peers, &peerCtx->item.link);
+	wl_list_insert(&b->peers, &peerCtx->item.link);
 	return 0;
 
 error_rail_initialize:
@@ -2231,6 +2224,7 @@ rdp_backend_create(struct weston_compositor *compositor,
 	b->audio_out_teardown = config->audio_out_teardown;
 
 	wl_list_init(&b->output_list);
+	wl_list_init(&b->peers);
 	wl_list_init(&b->head_list);
 	b->head_index = 0;
 

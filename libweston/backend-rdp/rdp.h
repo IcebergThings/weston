@@ -102,6 +102,8 @@ struct rdp_backend {
 	struct weston_log_scope *debugClipboard;
 	uint32_t debugClipboardLevel;
 
+	struct wl_list peers;
+
 	char *server_cert;
 	char *server_key;
 	char *server_cert_content;
@@ -204,7 +206,6 @@ struct rdp_output {
 	pixman_image_t *shadow_surface;
 	uint32_t index;
 
-	struct wl_list peers;
 	struct wl_list link; // rdp_backend::output_list
 };
 
