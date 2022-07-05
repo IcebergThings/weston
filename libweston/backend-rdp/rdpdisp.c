@@ -99,13 +99,12 @@ disp_start_monitor_layout_change(freerdp_peer *client, struct rdp_monitor_mode *
 
 	pixman_region32_clear(&peerCtx->regionClientHeads);
 	/* move all heads to pending list */
-	b->head_pending_list = b->head_list;
-	b->head_pending_list.next->prev = &b->head_pending_list; 
-	b->head_pending_list.prev->next = &b->head_pending_list;
+	wl_list_init(&b->head_pending_list);
+	wl_list_insert_list(&b->head_pending_list, &b->head_list);
+	wl_list_init(&b->head_list);
+
 	/* init move pending list */
 	wl_list_init(&b->head_move_pending_list);
-	/* clear head list */
-	wl_list_init(&b->head_list);
 	for (UINT32 i = 0; i < monitorCount; i++, monitorMode++) {
 		struct rdp_head *current, *tmp;
 		wl_list_for_each_safe(current, tmp, &b->head_pending_list, link) {
