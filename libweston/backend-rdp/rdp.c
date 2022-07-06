@@ -489,7 +489,6 @@ rdp_output_set_size(struct weston_output *base,
 	struct weston_head *head;
 	struct weston_mode *currentMode;
 	struct weston_mode initMode;
-	BOOL is_preferred_mode = false;
 
 	/* We can only be called once. */
 	assert(!output->base.current_mode);
@@ -514,12 +513,6 @@ rdp_output_set_size(struct weston_output *base,
 
 		/* In HiDef RAIL mode, set this mode as preferred mode */
 		if (client && client->context->settings->HiDefRemoteApp) {
-			if (h->monitorMode.monitorDef.width && h->monitorMode.monitorDef.height) {
-				/* given width/height must match with monitor's if provided */
-				assert(width == h->monitorMode.monitorDef.width);
-				assert(height == h->monitorMode.monitorDef.height);
-				is_preferred_mode = true;
-			}
 			break; // only one head per output in HiDef.
 		}
 	}
@@ -535,8 +528,7 @@ rdp_output_set_size(struct weston_output *base,
 		return -1;
 
 	currentMode->flags |= WL_OUTPUT_MODE_CURRENT;
-	if (is_preferred_mode)
-		currentMode->flags |= WL_OUTPUT_MODE_PREFERRED;
+	currentMode->flags |= WL_OUTPUT_MODE_PREFERRED;
 
 	output->base.current_mode = currentMode;
 	output->base.native_mode = currentMode;
