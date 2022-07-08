@@ -2848,7 +2848,11 @@ load_rdp_backend(struct weston_compositor *c,
 		read_rdp_config_bool("WESTON_RDP_DISPLAY_POWER_BY_SCREENUPDATE", false);
 
 	config.rail_config.enable_distro_name_title = read_rdp_config_bool("WESTON_RDP_APPEND_DISTRONAME_TITLE", true);
+#if defined(__arm__) || defined(__aarch64__)
+	config.rail_config.enable_copy_warning_title = read_rdp_config_bool("WESTON_RDP_COPY_WARNING_TITLE", false);
+#else
 	config.rail_config.enable_copy_warning_title = read_rdp_config_bool("WESTON_RDP_COPY_WARNING_TITLE", true);
+#endif
 
 	wet_set_simple_head_configurator(c, rdp_backend_output_configure);
 
