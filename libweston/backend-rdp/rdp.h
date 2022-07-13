@@ -277,7 +277,7 @@ struct rdp_peer_context {
 	bool is_window_zorder_dirty;
 
 	// Multiple monitor support (monitor topology)
-	pixman_region32_t regionClientHeads;
+	int32_t desktop_top, desktop_left, desktop_width, desktop_height;
 
 	void *audio_in_private;
 	void *audio_out_private;

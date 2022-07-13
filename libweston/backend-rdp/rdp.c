@@ -1266,9 +1266,10 @@ xf_peer_activate(freerdp_peer* client)
 					settings->DesktopPhysicalHeight);
 			}
 		}
-		pixman_region32_clear(&peerCtx->regionClientHeads);
-		pixman_region32_init_rect(&peerCtx->regionClientHeads,
-			0, 0, settings->DesktopWidth, settings->DesktopHeight);
+		peerCtx->desktop_top = 0;
+		peerCtx->desktop_left = 0;
+		peerCtx->desktop_width = settings->DesktopWidth;
+		peerCtx->desktop_height = settings->DesktopHeight;
 
 		pixman_region32_clear(&b->head_default->regionClient);
 		pixman_region32_init_rect(&b->head_default->regionClient,
@@ -1385,8 +1386,8 @@ rdp_translate_and_notify_mouse_position(RdpPeerContext *peerContext, UINT16 x, U
 	/* (TS_POINTERX_EVENT):The xy-coordinate of the pointer relative to the top-left
 	                       corner of the server's desktop combined all monitors */
 	/* first, convert to the coordinate based on primary monitor's upper-left as (0,0) */
-	sx = x + peerContext->regionClientHeads.extents.x1;
-	sy = y + peerContext->regionClientHeads.extents.y1;
+	sx = x + peerContext->desktop_left;
+	sy = y + peerContext->desktop_top;
 
 	/* translate client's x/y to the coordinate in weston space. */
 	/* TODO: to_weston_coordinate() is translate based on where pointer is,

@@ -2868,8 +2868,8 @@ disp_monitor_layout_change_callback(bool freeOnly, void *dataIn)
         }
 
 	/* tell client the server updated the monitor layout */
-	reset_graphics.width = peerCtx->regionClientHeads.extents.x2 - peerCtx->regionClientHeads.extents.x1;
-	reset_graphics.height = peerCtx->regionClientHeads.extents.y2 - peerCtx->regionClientHeads.extents.x1;
+	reset_graphics.width = peerCtx->desktop_width;
+	reset_graphics.height = peerCtx->desktop_height;
 	reset_graphics.monitorCount = data->count;
 	reset_graphics.monitorDefArray = reset_monitor_def;
 	peerCtx->rail_grfx_server_context->ResetGraphics(peerCtx->rail_grfx_server_context, &reset_graphics);
@@ -3559,8 +3559,6 @@ rdp_rail_peer_context_free(freerdp_peer* client, RdpPeerContext* context)
 #endif // HAVE_FREERDP_GFXREDIR_H
 	rdp_id_manager_free(&context->surfaceId);
 	rdp_id_manager_free(&context->windowId);
-
-	pixman_region32_fini(&context->regionClientHeads);
 }
 
 BOOL
@@ -3639,8 +3637,6 @@ rdp_rail_peer_init(freerdp_peer *client, RdpPeerContext *peerCtx)
 	peerCtx->currentFrameId = 0;
 	peerCtx->acknowledgedFrameId = 0;
 
-	pixman_region32_init(&peerCtx->regionClientHeads);
-
 	return TRUE;
 
 error_return:
@@ -3707,9 +3703,6 @@ print_rdp_head(FILE *fp, const struct rdp_head *current)
 		current->monitorMode.monitorDef.attributes.deviceScaleFactor);
 	fprintf(fp,"    scale:%d, client scale :%3.2f\n",
 		current->monitorMode.scale, current->monitorMode.clientScale);
-	fprintf(fp,"    regionClient: x1:%d, y1:%d, x2:%d, y2:%d\n",
-		current->regionClient.extents.x1, current->regionClient.extents.y1,
-		current->regionClient.extents.x2, current->regionClient.extents.y2);
 	fprintf(fp,"    regionWeston: x1:%d, y1:%d, x2:%d, y2:%d\n",
 		current->regionWeston.extents.x1, current->regionWeston.extents.y1,
 		current->regionWeston.extents.x2, current->regionWeston.extents.y2);

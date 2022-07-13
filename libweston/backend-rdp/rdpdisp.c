@@ -94,10 +94,11 @@ disp_start_monitor_layout_change(freerdp_peer *client, struct rdp_monitor_mode *
 {
 	RdpPeerContext *peerCtx = (RdpPeerContext *)client->context;
 	struct rdp_backend *b = peerCtx->rdpBackend;
+	pixman_region32_t desktop;
 
 	assert_compositor_thread(b);
 
-	pixman_region32_clear(&peerCtx->regionClientHeads);
+	pixman_region32_init(&desktop);
 	/* move all heads to pending list */
 	wl_list_init(&b->head_pending_list);
 	wl_list_insert_list(&b->head_pending_list, &b->head_list);
@@ -107,6 +108,13 @@ disp_start_monitor_layout_change(freerdp_peer *client, struct rdp_monitor_mode *
 	wl_list_init(&b->head_move_pending_list);
 	for (UINT32 i = 0; i < monitorCount; i++, monitorMode++) {
 		struct rdp_head *current, *tmp;
+		/* accumulate monitor layout */
+		pixman_region32_union_rect(&desktop, &desktop,
+					   monitorMode->monitorDef.x,
+					   monitorMode->monitorDef.y,
+					   monitorMode->monitorDef.width,
+					   monitorMode->monitorDef.height);
+
 		wl_list_for_each_safe(current, tmp, &b->head_pending_list, link) {
 			if (memcmp(&current->monitorMode, monitorMode, sizeof(*monitorMode)) == 0) {
 				rdp_debug_verbose(b, "Head mode exact match:%s, x:%d, y:%d, width:%d, height:%d, is_primary: %d\n",
@@ -117,15 +125,16 @@ disp_start_monitor_layout_change(freerdp_peer *client, struct rdp_monitor_mode *
 				/* move from pending list to move pending list */
 				wl_list_remove(&current->link);
 				wl_list_insert(&b->head_move_pending_list, &current->link);
-				/* accumulate monitor layout */
-				pixman_region32_union_rect(&peerCtx->regionClientHeads, &peerCtx->regionClientHeads,
-					current->monitorMode.monitorDef.x, current->monitorMode.monitorDef.y,
-					current->monitorMode.monitorDef.width, current->monitorMode.monitorDef.height);
 				*doneIndex |= (1 << i);
 				break;
 			}
 		}
 	}
+	peerCtx->desktop_left = desktop.extents.x1;
+	peerCtx->desktop_top = desktop.extents.y1;
+	peerCtx->desktop_width = desktop.extents.x2 - desktop.extents.x1;
+	peerCtx->desktop_height = desktop.extents.y2 - desktop.extents.y1;
+	pixman_region32_fini(&desktop);
 }
 
 static void
@@ -185,9 +194,6 @@ disp_end_monitor_layout_change(freerdp_peer *client)
 			is_primary_found = TRUE;
 		}
 	}
-	rdp_debug(b, "client virtual desktop is (%d,%d) - (%d,%d)\n", 
-		peerCtx->regionClientHeads.extents.x1, peerCtx->regionClientHeads.extents.y1,
-		peerCtx->regionClientHeads.extents.x2, peerCtx->regionClientHeads.extents.y2);
 }
 
 static UINT
@@ -316,11 +322,6 @@ disp_set_monitor_layout_change(freerdp_peer *client, struct rdp_monitor_mode *mo
 			rdp_debug(b, "output doesn't exist for head %s\n", head->name);
 		}
 	}
-
-	/* accumulate monitor layout */
-	pixman_region32_union_rect(&peerCtx->regionClientHeads, &peerCtx->regionClientHeads,
-		monitorMode->monitorDef.x, monitorMode->monitorDef.y,
-		monitorMode->monitorDef.width, monitorMode->monitorDef.height);
 
 	return 0;
 }
