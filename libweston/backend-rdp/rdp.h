@@ -277,7 +277,6 @@ struct rdp_peer_context {
 
 	// Multiple monitor support (monitor topology)
 	pixman_region32_t regionClientHeads;
-	pixman_region32_t regionWestonHeads;
 
 	void *audio_in_private;
 	void *audio_out_private;

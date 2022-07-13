@@ -3561,7 +3561,6 @@ rdp_rail_peer_context_free(freerdp_peer* client, RdpPeerContext* context)
 	rdp_id_manager_free(&context->windowId);
 
 	pixman_region32_fini(&context->regionClientHeads);
-	pixman_region32_fini(&context->regionWestonHeads);
 }
 
 BOOL
@@ -3641,7 +3640,6 @@ rdp_rail_peer_init(freerdp_peer *client, RdpPeerContext *peerCtx)
 	peerCtx->acknowledgedFrameId = 0;
 
 	pixman_region32_init(&peerCtx->regionClientHeads);
-	pixman_region32_init(&peerCtx->regionWestonHeads);
 
 	return TRUE;
 

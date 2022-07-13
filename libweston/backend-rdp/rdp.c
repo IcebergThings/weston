@@ -1284,10 +1284,6 @@ xf_peer_activate(freerdp_peer* client)
 		rdp_debug(b, "%s: OutputWidth:%d, OutputHeight:%d, OutputScaleFactor:%d\n", __FUNCTION__,
 			weston_output->width, weston_output->height, weston_output->scale);
 
-		pixman_region32_clear(&peerCtx->regionWestonHeads);
-		pixman_region32_init_rect(&peerCtx->regionWestonHeads,
-			0, 0, weston_output->width, weston_output->height);
-
 		pixman_region32_clear(&b->head_default->regionWeston);
 		pixman_region32_init_rect(&b->head_default->regionWeston,
 			0, 0, weston_output->width, weston_output->height);

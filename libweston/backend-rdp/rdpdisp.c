@@ -98,7 +98,6 @@ disp_start_monitor_layout_change(freerdp_peer *client, struct rdp_monitor_mode *
 	assert_compositor_thread(b);
 
 	pixman_region32_clear(&peerCtx->regionClientHeads);
-	pixman_region32_clear(&peerCtx->regionWestonHeads);
 	/* move all heads to pending list */
 	b->head_pending_list = b->head_list;
 	b->head_pending_list.next->prev = &b->head_pending_list; 
@@ -123,9 +122,6 @@ disp_start_monitor_layout_change(freerdp_peer *client, struct rdp_monitor_mode *
 				pixman_region32_union_rect(&peerCtx->regionClientHeads, &peerCtx->regionClientHeads,
 					current->monitorMode.monitorDef.x, current->monitorMode.monitorDef.y,
 					current->monitorMode.monitorDef.width, current->monitorMode.monitorDef.height);
-				pixman_region32_union_rect(&peerCtx->regionWestonHeads, &peerCtx->regionWestonHeads,
-					current->monitorMode.rectWeston.x, current->monitorMode.rectWeston.y,
-					current->monitorMode.rectWeston.width, current->monitorMode.rectWeston.height);
 				*doneIndex |= (1 << i);
 				break;
 			}
@@ -193,9 +189,6 @@ disp_end_monitor_layout_change(freerdp_peer *client)
 	rdp_debug(b, "client virtual desktop is (%d,%d) - (%d,%d)\n", 
 		peerCtx->regionClientHeads.extents.x1, peerCtx->regionClientHeads.extents.y1,
 		peerCtx->regionClientHeads.extents.x2, peerCtx->regionClientHeads.extents.y2);
-	rdp_debug(b, "weston virtual desktop is (%d,%d) - (%d,%d)\n", 
-		peerCtx->regionWestonHeads.extents.x1, peerCtx->regionWestonHeads.extents.y1,
-		peerCtx->regionWestonHeads.extents.x2, peerCtx->regionWestonHeads.extents.y2);
 }
 
 static UINT
@@ -329,9 +322,6 @@ disp_set_monitor_layout_change(freerdp_peer *client, struct rdp_monitor_mode *mo
 	pixman_region32_union_rect(&peerCtx->regionClientHeads, &peerCtx->regionClientHeads,
 		monitorMode->monitorDef.x, monitorMode->monitorDef.y,
 		monitorMode->monitorDef.width, monitorMode->monitorDef.height);
-	pixman_region32_union_rect(&peerCtx->regionWestonHeads, &peerCtx->regionWestonHeads,
-		monitorMode->rectWeston.x, monitorMode->rectWeston.y,
-		monitorMode->rectWeston.width, monitorMode->rectWeston.height);
 
 	return 0;
 }
