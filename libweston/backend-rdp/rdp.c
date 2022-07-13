@@ -703,10 +703,9 @@ rdp_head_create(struct weston_compositor *compositor, BOOL isPrimary, struct rdp
 		head->monitorMode.clientScale = 1;
 		pixman_region32_init(&head->regionClient);
 	}
-	if (isPrimary) {
+	if (isPrimary)
 		rdp_debug(b, "Default head is being added\n");
-		b->head_default = head;
-	}
+
 	head->monitorMode.monitorDef.is_primary = isPrimary;
 	wl_list_insert(&b->head_list, &head->link);
 	sprintf(name, "rdp-%x", head->index);
@@ -721,14 +720,9 @@ rdp_head_create(struct weston_compositor *compositor, BOOL isPrimary, struct rdp
 void
 rdp_head_destroy(struct weston_compositor *compositor, struct rdp_head *head)
 {
-	struct rdp_backend *b = to_rdp_backend(compositor);
 	weston_head_release(&head->base);
 	wl_list_remove(&head->link);
 	pixman_region32_fini(&head->regionClient);
-	if (b->head_default == head) {
-		rdp_debug(b, "Default head is being removed\n");
-		b->head_default = NULL;
-	}
 	free(head);
 }
 
@@ -1244,31 +1238,9 @@ xf_peer_activate(freerdp_peer* client)
 					client->context->update->DesktopResize(client->context);
 				}
 			} else {
-				/* ask weston to adjust size */
-				struct weston_mode new_mode;
-				struct weston_mode *target_mode;
-				new_mode.width = (int)settings->DesktopWidth;
-				new_mode.height = (int)settings->DesktopHeight;
-				target_mode = ensure_matching_mode(&output->base, &new_mode);
-				if (!target_mode) {
-					rdp_debug_error(b, "client mode not found\n");
-					goto error_exit;
-				}
-				weston_output_mode_set_native(&output->base, target_mode,
-					output->base.scale ? output->base.scale : 1);
-				weston_head_set_physical_size(&b->head_default->base,
-					settings->DesktopPhysicalWidth,
-					settings->DesktopPhysicalHeight);
+				xf_peer_adjust_monitor_layout(client);
 			}
 		}
-		peerCtx->desktop_top = 0;
-		peerCtx->desktop_left = 0;
-		peerCtx->desktop_width = settings->DesktopWidth;
-		peerCtx->desktop_height = settings->DesktopHeight;
-
-		pixman_region32_clear(&b->head_default->regionClient);
-		pixman_region32_init_rect(&b->head_default->regionClient,
-			0, 0, settings->DesktopWidth, settings->DesktopHeight);
 
 		weston_output = &output->base;
 
@@ -1805,6 +1777,7 @@ xf_peer_adjust_monitor_layout(freerdp_peer *client)
 	rdpMonitor *monitors;
 	unsigned int monitor_count;
 	BOOL success;
+	bool fallback = false;
 	unsigned int i;
 
 	rdp_debug(b, "%s:\n", __func__);
@@ -1821,7 +1794,7 @@ xf_peer_adjust_monitor_layout(freerdp_peer *client)
 	if (!settings->HiDefRemoteApp || b->rdprail_shell_api == NULL) {
 		if (settings->MonitorCount > 1) {
 			rdp_debug_error(b, "\nWARNING\nWARNING\nWARNING: multiple monitor is not supported in non HiDef RAIL mode\nWARNING\nWARNING\n");
-			return FALSE;
+			fallback = true;
 		}
 	}
 	if (settings->MonitorCount > RDP_MAX_MONITOR) {
@@ -1830,7 +1803,7 @@ xf_peer_adjust_monitor_layout(freerdp_peer *client)
 		return FALSE;
 	}
 
-	if (settings->MonitorCount > 0 && settings->MonitorDefArray) {
+	if ((settings->MonitorCount > 0 && settings->MonitorDefArray) && !fallback) {
 		rdpMonitor *rdp_monitor = settings->MonitorDefArray;
 		monitor_count = settings->MonitorCount;
 		monitors = xmalloc(sizeof(*monitors) * monitor_count);

@@ -69,6 +69,10 @@ static float
 disp_get_client_scale_from_monitor(RdpPeerContext *peerCtx, struct rdp_monitor_mode *monitorMode)
 {
 	struct rdp_backend *b = peerCtx->rdpBackend;
+
+	if (monitorMode->monitorDef.attributes.desktopScaleFactor == 0.0)
+		return 1.0f;
+
 	if (b->enable_hi_dpi_support) {
 		if (b->debug_desktop_scaling_factor)
 			return (float)b->debug_desktop_scaling_factor / 100.f;
@@ -210,13 +214,16 @@ disp_set_monitor_layout_change(freerdp_peer *client, struct rdp_monitor_mode *mo
 	assert_compositor_thread(b);
 
 	if (monitorMode->monitorDef.is_primary) {
-		assert(b->head_default);
 		assert(b->output_default);
 
 		/* use default output and head for primary */
 		output = &b->output_default->base;
-		head = &b->head_default->base;
-		current = to_rdp_head(head);
+		wl_list_for_each(current, &b->head_pending_list, link)
+			if (current->monitorMode.monitorDef.is_primary)
+				break;
+
+		assert(current->monitorMode.monitorDef.is_primary);
+		head = &current->base;
 
 		if (current->monitorMode.monitorDef.width != monitorMode->monitorDef.width ||
 			current->monitorMode.monitorDef.height != monitorMode->monitorDef.height ||
