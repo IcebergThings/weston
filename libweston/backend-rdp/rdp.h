@@ -193,7 +193,6 @@ struct rdp_head {
 	struct rdp_monitor_mode monitorMode;
 	/*TODO: these region/rectangles can be moved to rdp_output */
 	pixman_region32_t regionClient; // in client coordnate.
-	pixman_region32_t regionWeston; // in weston coordnate.
 	pixman_rectangle32_t workareaClient; // in client coordinate.
 	pixman_rectangle32_t workarea; // in weston coordinate.
 

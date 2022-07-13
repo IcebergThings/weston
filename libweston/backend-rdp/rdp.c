@@ -698,14 +698,10 @@ rdp_head_create(struct weston_compositor *compositor, BOOL isPrimary, struct rdp
 		pixman_region32_init_rect(&head->regionClient,
 			monitorMode->monitorDef.x, monitorMode->monitorDef.y,
 			monitorMode->monitorDef.width, monitorMode->monitorDef.height);
-		pixman_region32_init_rect(&head->regionWeston,
-			monitorMode->rectWeston.x, monitorMode->rectWeston.y,
-			monitorMode->rectWeston.width, monitorMode->rectWeston.height);
 	} else {
 		head->monitorMode.scale = 1.0f;
 		head->monitorMode.clientScale = 1;
 		pixman_region32_init(&head->regionClient);
-		pixman_region32_init(&head->regionWeston);
 	}
 	if (isPrimary) {
 		rdp_debug(b, "Default head is being added\n");
@@ -728,7 +724,6 @@ rdp_head_destroy(struct weston_compositor *compositor, struct rdp_head *head)
 	struct rdp_backend *b = to_rdp_backend(compositor);
 	weston_head_release(&head->base);
 	wl_list_remove(&head->link);
-	pixman_region32_fini(&head->regionWeston);
 	pixman_region32_fini(&head->regionClient);
 	if (b->head_default == head) {
 		rdp_debug(b, "Default head is being removed\n");
@@ -1279,10 +1274,6 @@ xf_peer_activate(freerdp_peer* client)
 
 		rdp_debug(b, "%s: OutputWidth:%d, OutputHeight:%d, OutputScaleFactor:%d\n", __FUNCTION__,
 			weston_output->width, weston_output->height, weston_output->scale);
-
-		pixman_region32_clear(&b->head_default->regionWeston);
-		pixman_region32_init_rect(&b->head_default->regionWeston,
-			0, 0, weston_output->width, weston_output->height);
 
 		rfx_context_reset(peerCtx->rfx_context, weston_output->width, weston_output->height);
 		nsc_context_reset(peerCtx->nsc_context, weston_output->width, weston_output->height);

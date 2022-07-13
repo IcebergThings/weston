@@ -272,10 +272,6 @@ disp_set_monitor_layout_change(freerdp_peer *client, struct rdp_monitor_mode *mo
 		pixman_region32_init_rect(&current->regionClient,
 			monitorMode->monitorDef.x, monitorMode->monitorDef.y,
 			monitorMode->monitorDef.width, monitorMode->monitorDef.height);
-		pixman_region32_clear(&current->regionWeston);
-		pixman_region32_init_rect(&current->regionWeston,
-			monitorMode->rectWeston.x, monitorMode->rectWeston.y,
-			monitorMode->rectWeston.width, monitorMode->rectWeston.height);
 		/* move from pending list to move pending list */
 		wl_list_remove(&current->link);
 		wl_list_insert(&b->head_move_pending_list, &to_rdp_head(head)->link);

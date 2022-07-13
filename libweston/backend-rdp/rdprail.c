@@ -3703,9 +3703,6 @@ print_rdp_head(FILE *fp, const struct rdp_head *current)
 		current->monitorMode.monitorDef.attributes.deviceScaleFactor);
 	fprintf(fp,"    scale:%d, client scale :%3.2f\n",
 		current->monitorMode.scale, current->monitorMode.clientScale);
-	fprintf(fp,"    regionWeston: x1:%d, y1:%d, x2:%d, y2:%d\n",
-		current->regionWeston.extents.x1, current->regionWeston.extents.y1,
-		current->regionWeston.extents.x2, current->regionWeston.extents.y2);
 	fprintf(fp,"    workarea: x:%d, y:%d, width:%d, height:%d\n",
 		current->workarea.x, current->workarea.y,
 		current->workarea.width, current->workarea.height);
