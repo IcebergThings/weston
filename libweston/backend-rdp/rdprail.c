@@ -49,6 +49,9 @@
 #define RAIL_WINDOW_FULLSCREEN_STYLE (WS_POPUP | WS_VISIBLE | WS_CLIPSIBLINGS | WS_GROUP | WS_TABSTOP)
 #define RAIL_WINDOW_NORMAL_STYLE (RAIL_WINDOW_FULLSCREEN_STYLE | WS_THICKFRAME | WS_CAPTION)
 
+#define max(a, b) (((a) > (b)) ? (a) : (b))
+#define min(a, b) (((a) > (b)) ? (b) : (a))
+
 extern PWtsApiFunctionTable FreeRDP_InitWtsApi(void);
 
 static void rdp_rail_destroy_window(struct wl_listener *listener, void *data);
@@ -346,9 +349,8 @@ rail_client_SnapArrange_callback(bool freeOnly, void *arg)
 			to_weston_coordinate(peerCtx,
 				&snapArrangeRect.x, &snapArrangeRect.y,
 				&snapArrangeRect.width, &snapArrangeRect.height);
-			if (!b->enable_window_shadow_remoting &&
-				b->rdprail_shell_api &&
-				b->rdprail_shell_api->get_window_geometry) {
+			if (is_window_shadow_remoting_disabled(peerCtx)) {
+				/* offset window shadow area */
 				/* window_geometry here is last commited geometry */
 				b->rdprail_shell_api->get_window_geometry(surface, &windowGeometry);
 				snapArrangeRect.x -= windowGeometry.x;
@@ -411,9 +413,8 @@ rail_client_WindowMove_callback(bool freeOnly, void *arg)
 			to_weston_coordinate(peerCtx,
 				&windowMoveRect.x, &windowMoveRect.y,
 				&windowMoveRect.width, &windowMoveRect.height);
-			if (!b->enable_window_shadow_remoting &&
-				b->rdprail_shell_api &&
-				b->rdprail_shell_api->get_window_geometry) {
+			if (is_window_shadow_remoting_disabled(peerCtx)) {
+				/* offset window shadow area */
 				/* window_geometry here is last commited geometry */
 				b->rdprail_shell_api->get_window_geometry(surface, &windowGeometry);
 				windowMoveRect.x -= windowGeometry.x;
@@ -1302,6 +1303,7 @@ rdp_rail_create_window(struct wl_listener *listener, void *data)
 	struct weston_geometry windowGeometry = {.x = 0, .y = 0, .width = surface->width, .height = surface->height};
 	RECTANGLE_16 window_rect = { 0, 0, surface->width, surface->height };
 	RECTANGLE_16 window_vis = { 0, 0, surface->width, surface->height };
+	uint32_t window_margin_top = 0, window_margin_left = 0, window_margin_right = 0, window_margin_bottom = 0;
 	int numViews;
 	struct weston_view *view;
 	UINT32 window_id;
@@ -1394,10 +1396,28 @@ rdp_rail_create_window(struct wl_listener *listener, void *data)
 		rdp_debug_verbose(b, "%s: surface has no view (windowId:0x%x)\n", __func__, rail_state->window_id);
 	}
 
-	if (!b->enable_window_shadow_remoting &&
-		b->rdprail_shell_api &&
-		b->rdprail_shell_api->get_window_geometry) {
+	if (is_window_shadow_remoting_disabled(peerCtx)) {
+		/* drop window shadow area */
 		b->rdprail_shell_api->get_window_geometry(surface, &windowGeometry);
+
+		/* calculate window margin from input extents */
+		if (windowGeometry.x > max(0, surface->input.extents.x1))
+			window_margin_left = windowGeometry.x - max(0, surface->input.extents.x1);
+		window_margin_left = max(window_margin_left, RDP_RAIL_WINDOW_RESIZE_MARGIN);
+
+		if (windowGeometry.y > max(0, surface->input.extents.y1))
+			window_margin_top = windowGeometry.y - max(0, surface->input.extents.y1);
+		window_margin_top = max(window_margin_top, RDP_RAIL_WINDOW_RESIZE_MARGIN);
+
+		if (min(surface->input.extents.x2, surface->width) > (windowGeometry.x + windowGeometry.width))
+			window_margin_right = min(surface->input.extents.x2, surface->width) - (windowGeometry.x + windowGeometry.width);
+		window_margin_right = max(window_margin_right, RDP_RAIL_WINDOW_RESIZE_MARGIN);
+
+		if (min(surface->input.extents.y2, surface->height) > (windowGeometry.y + windowGeometry.height))
+			window_margin_bottom = min(surface->input.extents.y2, surface->height) - (windowGeometry.y + windowGeometry.height);
+		window_margin_bottom = max(window_margin_bottom, RDP_RAIL_WINDOW_RESIZE_MARGIN);
+
+		/* offset window origin by window geometry */
 		clientPos.x += windowGeometry.x;
 		clientPos.y += windowGeometry.y;
 		clientPos.width = windowGeometry.width;
@@ -1405,9 +1425,17 @@ rdp_rail_create_window(struct wl_listener *listener, void *data)
 	}
 
 	/* apply global to output transform, and translate to client coordinate */
-	if (surface->output)
+	if (surface->output) {
 		to_client_coordinate(peerCtx, surface->output,
 			&clientPos.x, &clientPos.y, &clientPos.width, &clientPos.height);
+
+		if (is_window_shadow_remoting_disabled(peerCtx)) {
+			to_client_coordinate(peerCtx, surface->output,
+				&window_margin_left, &window_margin_top, NULL, NULL);
+			to_client_coordinate(peerCtx, surface->output,
+				&window_margin_right, &window_margin_bottom, NULL, NULL);
+		}
+	}
 
 	window_rect.top = window_vis.top = clientPos.y;
 	window_rect.left = window_vis.left = clientPos.x;
@@ -1471,6 +1499,16 @@ rdp_rail_create_window(struct wl_listener *listener, void *data)
 	window_state_order.numVisibilityRects = 1;
 	window_state_order.visibilityRects = &window_vis;
 
+	if (is_window_shadow_remoting_disabled(peerCtx)) {
+		/* add resize margin area */
+		window_order_info.fieldFlags |=
+			WINDOW_ORDER_FIELD_RESIZE_MARGIN_X | WINDOW_ORDER_FIELD_RESIZE_MARGIN_Y;
+		window_state_order.resizeMarginLeft = window_margin_left;
+		window_state_order.resizeMarginTop = window_margin_top;
+		window_state_order.resizeMarginRight = window_margin_right;
+		window_state_order.resizeMarginBottom = window_margin_bottom;
+	}
+
 	/*window_state_order.titleInfo = NULL; */
 	/*window_state_order.OverlayDescription = 0;*/
 
@@ -1483,6 +1521,10 @@ rdp_rail_create_window(struct wl_listener *listener, void *data)
 	rail_state->parent_window_id = window_state_order.ownerWindowId;
 	rail_state->pos = pos;
 	rail_state->clientPos = clientPos;
+	rail_state->window_margin_left = window_margin_left;
+	rail_state->window_margin_top = window_margin_top;
+	rail_state->window_margin_right = window_margin_right;
+	rail_state->window_margin_bottom = window_margin_bottom;
 	rail_state->isWindowCreated = TRUE;
 	rail_state->get_label = (void *)-1; // label to be re-checked at update.
 	rail_state->taskbarButton = window_state_order.TaskbarButton;
@@ -1715,6 +1757,7 @@ rdp_rail_update_window(struct weston_surface *surface, struct update_window_iter
 	struct weston_geometry contentBufferWindowGeometry;
 	RECTANGLE_16 window_rect;
 	RECTANGLE_16 window_vis;
+	uint32_t window_margin_top = 0, window_margin_left = 0, window_margin_right = 0, window_margin_bottom = 0;
 	int numViews;
 	struct weston_view *view;
 	UINT32 window_id;
@@ -1837,10 +1880,28 @@ rdp_rail_update_window(struct weston_surface *surface, struct update_window_iter
 		rdp_debug_verbose(b, "%s: surface has no view (windowId:0x%x)\n", __func__, rail_state->window_id);
 	}
 
-	if (!b->enable_window_shadow_remoting &&
-		b->rdprail_shell_api &&
-		b->rdprail_shell_api->get_window_geometry) {
+	if (is_window_shadow_remoting_disabled(peerCtx)) {
+		/* drop window shadow area */
 		b->rdprail_shell_api->get_window_geometry(surface, &windowGeometry);
+
+		/* calculate window margin from input extents */
+		if (windowGeometry.x > max(0, surface->input.extents.x1))
+			window_margin_left = windowGeometry.x - max(0, surface->input.extents.x1);
+		window_margin_left = max(window_margin_left, RDP_RAIL_WINDOW_RESIZE_MARGIN);
+
+		if (windowGeometry.y > max(0, surface->input.extents.y1))
+			window_margin_top = windowGeometry.y - max(0, surface->input.extents.y1);
+		window_margin_top = max(window_margin_top, RDP_RAIL_WINDOW_RESIZE_MARGIN);
+
+		if (min(surface->input.extents.x2, surface->width) > (windowGeometry.x + windowGeometry.width))
+			window_margin_right = min(surface->input.extents.x2, surface->width) - (windowGeometry.x + windowGeometry.width);
+		window_margin_right = max(window_margin_right, RDP_RAIL_WINDOW_RESIZE_MARGIN);
+
+		if (min(surface->input.extents.y2, surface->height) > (windowGeometry.y + windowGeometry.height))
+			window_margin_bottom = min(surface->input.extents.y2, surface->height) - (windowGeometry.y + windowGeometry.height);
+		window_margin_bottom = max(window_margin_bottom, RDP_RAIL_WINDOW_RESIZE_MARGIN);
+
+		/* offset window origin by window geometry */
 		newClientPos.x += windowGeometry.x;
 		newClientPos.y += windowGeometry.y;
 		newClientPos.width = windowGeometry.width;
@@ -1849,9 +1910,17 @@ rdp_rail_update_window(struct weston_surface *surface, struct update_window_iter
 	contentBufferWindowGeometry = windowGeometry;
 
 	/* apply global to output transform, and translate to client coordinate */
-	if (surface->output)
+	if (surface->output) {
 		to_client_coordinate(peerCtx, surface->output,
 			&newClientPos.x, &newClientPos.y, &newClientPos.width, &newClientPos.height);
+
+		if (is_window_shadow_remoting_disabled(peerCtx)) {
+			to_client_coordinate(peerCtx, surface->output,
+				&window_margin_left, &window_margin_top, NULL, NULL);
+			to_client_coordinate(peerCtx, surface->output,
+				&window_margin_right, &window_margin_bottom, NULL, NULL);
+		}
+	}
 
 	/* when window move to new output with different scale, refresh all state to client. */
 	if (rail_state->output_scale != surface->output->current_scale) {
@@ -1991,6 +2060,30 @@ rdp_rail_update_window(struct weston_surface *surface, struct update_window_iter
 			window_order_info.fieldFlags |=
 				 WINDOW_ORDER_FIELD_TASKBAR_BUTTON;
 			window_state_order.TaskbarButton = (BYTE) rail_state->taskbarButton;
+		}
+
+		if (is_window_shadow_remoting_disabled(peerCtx)) {
+			if (rail_state->forceUpdateWindowState ||
+				rail_state->window_margin_left != window_margin_left ||
+				rail_state->window_margin_top != window_margin_top ||
+				rail_state->window_margin_right != window_margin_right ||
+				rail_state->window_margin_bottom != window_margin_bottom) {
+				/* add resize margin area */
+				window_order_info.fieldFlags |=
+					WINDOW_ORDER_FIELD_RESIZE_MARGIN_X | WINDOW_ORDER_FIELD_RESIZE_MARGIN_Y;
+				window_state_order.resizeMarginLeft = window_margin_left;
+				window_state_order.resizeMarginTop = window_margin_top;
+				window_state_order.resizeMarginRight = window_margin_right;
+				window_state_order.resizeMarginBottom = window_margin_bottom;
+
+				rail_state->window_margin_left = window_margin_left;
+				rail_state->window_margin_top = window_margin_top;
+				rail_state->window_margin_right = window_margin_right;
+				rail_state->window_margin_bottom = window_margin_bottom;
+
+				rdp_debug_verbose(b, "WindowUpdate(0x%x - window margin left:%d, top:%d, right:%d, bottom:%d\n",
+					window_id, window_margin_left, window_margin_top, window_margin_right, window_margin_bottom);
+			}
 		}
 
 		if (rail_state->forceUpdateWindowState ||
@@ -2254,7 +2347,7 @@ rdp_rail_update_window(struct weston_surface *surface, struct update_window_iter
 			}
 			/* damageBox represents damaged area in contentBuffer */
 			/* if it's not remoting window shadow, exclude the area from damageBox */
-			if (!b->enable_window_shadow_remoting) {
+			if (is_window_shadow_remoting_disabled(peerCtx)) {
 				if (damageBox.x1 < contentBufferWindowGeometry.x)
 					damageBox.x1 = contentBufferWindowGeometry.x;
 				if (damageBox.x2 > contentBufferWindowGeometry.x + contentBufferWindowGeometry.width)
@@ -3133,9 +3226,8 @@ rdp_rail_start_window_move(
 		rdp_debug_verbose(b, "%s: surface has no view (windowId:0x%x)\n", __func__, rail_state->window_id);
 	}
 
-	if (!b->enable_window_shadow_remoting &&
-		b->rdprail_shell_api &&
-		b->rdprail_shell_api->get_window_geometry) {
+	if (is_window_shadow_remoting_disabled(peerCtx)) {
+		/* offset window shadow area */
 		b->rdprail_shell_api->get_window_geometry(surface, &windowGeometry);
 		posX += windowGeometry.x;
 		posY += windowGeometry.y;
@@ -3236,9 +3328,8 @@ rdp_rail_end_window_move(struct weston_surface* surface)
 		rdp_debug_verbose(b, "%s: surface has no view (windowId:0x%x)\n", __func__, rail_state->window_id);
 	}
 
-	if (!b->enable_window_shadow_remoting &&
-		b->rdprail_shell_api &&
-		b->rdprail_shell_api->get_window_geometry) {
+	if (is_window_shadow_remoting_disabled(peerCtx)) {
+		/* offset window shadow area */
 		b->rdprail_shell_api->get_window_geometry(surface, &windowGeometry);
 		posX += windowGeometry.x;
 		posY += windowGeometry.y;
@@ -3589,6 +3680,9 @@ rdp_rail_dump_window_iter(void *element, void *data)
 	fprintf(fp,"    RDP client position x:%d, y:%d width:%d height:%d\n",
 		rail_state->clientPos.x, rail_state->clientPos.y,
 		rail_state->clientPos.width, rail_state->clientPos.height);
+	fprintf(fp,"    Window margin left:%d, top:%d, right:%d bottom:%d\n",
+		rail_state->window_margin_left, rail_state->window_margin_top,
+		rail_state->window_margin_right, rail_state->window_margin_bottom);
 	fprintf(fp,"    Window geometry x:%d, y:%d, width:%d height:%d\n",
 		windowGeometry.x, windowGeometry.y,
 		windowGeometry.width, windowGeometry.height);
