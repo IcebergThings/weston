@@ -745,17 +745,8 @@ rdp_destroy(struct weston_compositor *ec)
 	struct rdp_peers_item *rdp_peer, *tmp;
 	int i;
 
-	if (b->output_default) {
-		wl_list_for_each_safe(rdp_peer, tmp, &b->peers, link) {
-			freerdp_peer* client = rdp_peer->peer;
-
-			client->Disconnect(client);
-			freerdp_peer_context_free(client);
-			freerdp_peer_free(client);
-		}
-	} else if (b->rdp_peer) {
-		freerdp_peer* client = b->rdp_peer;
-		assert(client->context->settings->HiDefRemoteApp);
+	wl_list_for_each_safe(rdp_peer, tmp, &b->peers, link) {
+		freerdp_peer* client = rdp_peer->peer;
 
 		client->Disconnect(client);
 		freerdp_peer_context_free(client);
