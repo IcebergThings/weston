@@ -79,6 +79,17 @@ rdp_peer_seat_led_update(struct weston_seat *seat_base, enum weston_led leds)
 	/*TODO: if Caps/Num lock change is triggered by server side, here can forward to client */
 }
 
+static struct rdp_output *
+rdp_get_first_output(struct rdp_backend *b)
+{
+	struct weston_output *output;
+
+	wl_list_for_each(output, &b->compositor->output_list, link) {
+		return to_rdp_output(output);
+	}
+	return NULL;
+}
+
 static void
 rdp_peer_refresh_rfx(pixman_region32_t *damage, pixman_image_t *image, freerdp_peer *peer)
 {
@@ -252,7 +263,7 @@ static void
 rdp_peer_refresh_region(pixman_region32_t *region, freerdp_peer *peer)
 {
 	RdpPeerContext *context = (RdpPeerContext *)peer->context;
-	struct rdp_output *output = context->rdpBackend->output_default;
+	struct rdp_output *output = rdp_get_first_output(context->rdpBackend);
 	rdpSettings *settings = peer->context->settings;
 
 	if (settings->RemoteFxCodec)
