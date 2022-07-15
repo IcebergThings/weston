@@ -90,7 +90,6 @@ struct rdp_backend {
 
 	freerdp_listener *listener;
 	struct wl_event_source *listener_events[MAX_FREERDP_FDS];
-	struct rdp_output *output_default; // default output created at backend initialize
 	struct wl_list output_list; // rdp_output::link
 	struct wl_list head_list; // rdp_head::link
 	struct wl_list head_pending_list; // used during monitor layout change.

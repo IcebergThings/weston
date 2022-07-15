@@ -646,10 +646,6 @@ rdp_output_attach_head(struct weston_output *output_base,
 		return -1;
 	}
 	o->index = h->index;
-	if (h->monitorMode.monitorDef.is_primary) {
-		assert(b->output_default == NULL);
-		b->output_default = o;
-	}
 	return 0;
 }
 
@@ -661,10 +657,6 @@ rdp_output_detach_head(struct weston_output *output_base,
 	struct rdp_head *h = to_rdp_head(head_base);
 	rdp_debug(b, "Head detaching: %s, index:%d, is_primary: %d\n",
 		head_base->name, h->index, h->monitorMode.monitorDef.is_primary);
-	if (h->monitorMode.monitorDef.is_primary) {
-		assert(b->output_default == to_rdp_output(output_base));
-		b->output_default = NULL;
-	}
 }
 
 static struct weston_output *
@@ -1221,9 +1213,8 @@ xf_peer_activate(freerdp_peer* client)
 		output = NULL;
 		weston_output = NULL;
 	} else {
+		output = rdp_get_first_output(b);
 		/* multiple monitor is not supported in non-HiDef */
-		assert(b->output_default);
-		output = b->output_default;
 		rdp_debug_error(b, "%s: DesktopWidth:%d, DesktopHeigh:%d, DesktopScaleFactor:%d\n", __FUNCTION__,
 			settings->DesktopWidth, settings->DesktopHeight, settings->DesktopScaleFactor);
 		if (output->base.width != (int)settings->DesktopWidth ||
