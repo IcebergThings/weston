@@ -213,53 +213,36 @@ disp_set_monitor_layout_change(freerdp_peer *client, struct rdp_monitor_mode *mo
 
 	assert_compositor_thread(b);
 
-	if (monitorMode->monitorDef.is_primary) {
-		assert(b->output_default);
+	/* search head match configuration from pending list */
+	wl_list_for_each(current, &b->head_pending_list, link) {
+		if (current->monitorMode.monitorDef.is_primary != monitorMode->monitorDef.is_primary)
+			continue;
 
-		/* use default output and head for primary */
-		output = &b->output_default->base;
-		wl_list_for_each(current, &b->head_pending_list, link)
-			if (current->monitorMode.monitorDef.is_primary)
-				break;
-
-		assert(current->monitorMode.monitorDef.is_primary);
-		head = &current->base;
-
-		if (current->monitorMode.monitorDef.width != monitorMode->monitorDef.width ||
-			current->monitorMode.monitorDef.height != monitorMode->monitorDef.height ||
-			current->monitorMode.scale != monitorMode->scale)
+		if (current->monitorMode.monitorDef.width == monitorMode->monitorDef.width &&
+			current->monitorMode.monitorDef.height == monitorMode->monitorDef.height &&
+			current->monitorMode.scale == monitorMode->scale) {
+			/* size mode (width/height/scale) */
+			head = &current->base;
+			output = head->output;
+			break;
+		} else if (current->monitorMode.monitorDef.x == monitorMode->monitorDef.x &&
+				current->monitorMode.monitorDef.y == monitorMode->monitorDef.y) {
+			/* position match in client space */
+			head = &current->base;
+			output = head->output;
 			updateMode = TRUE;
-	} else {
-		/* search head match configuration from pending list */
+			break;
+		}
+	}
+	if (!head) {
+		/* just pick first one to change mode */
 		wl_list_for_each(current, &b->head_pending_list, link) {
-			if (current->monitorMode.monitorDef.is_primary) {
-				/* primary is only re-used for primary */
-			} else if (current->monitorMode.monitorDef.width == monitorMode->monitorDef.width &&
-				current->monitorMode.monitorDef.height == monitorMode->monitorDef.height &&
-				current->monitorMode.scale == monitorMode->scale) {
-				/* size mode (width/height/scale) */
-				head = &current->base;
-				output = head->output;
-				break;
-			} else if (current->monitorMode.monitorDef.x == monitorMode->monitorDef.x &&
-					current->monitorMode.monitorDef.y == monitorMode->monitorDef.y) {
-				/* position match in client space */
+			/* primary is only re-used for primary */
+			if (!current->monitorMode.monitorDef.is_primary) {
 				head = &current->base;
 				output = head->output;
 				updateMode = TRUE;
 				break;
-			}
-		}
-		if (!head) {
-			/* just pick first one to change mode */
-			wl_list_for_each(current, &b->head_pending_list, link) {
-				/* primary is only re-used for primary */
-				if (!current->monitorMode.monitorDef.is_primary) {
-					head = &current->base;
-					output = head->output;
-					updateMode = TRUE;
-					break;
-				}
 			}
 		}
 	}
