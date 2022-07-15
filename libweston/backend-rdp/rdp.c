@@ -1601,8 +1601,7 @@ xf_input_synchronize_event(rdpInput *input, UINT32 flags)
 	freerdp_peer *client = input->context->peer;
 	RdpPeerContext *peerCtx = (RdpPeerContext *)input->context;
 	struct rdp_backend *b = peerCtx->rdpBackend;
-	struct rdp_output *output = b->output_default;
-	pixman_box32_t box;
+	struct weston_output *output;
 	pixman_region32_t damage;
 
 	rdp_debug_verbose(b, "RDP backend: %s ScrLk:%d, NumLk:%d, CapsLk:%d, KanaLk:%d\n",
@@ -1624,18 +1623,23 @@ xf_input_synchronize_event(rdpInput *input, UINT32 flags)
 			value);
 	}
 
-	if (!client->context->settings->HiDefRemoteApp && output) {
-		/* sends a full refresh */
-		box.x1 = 0;
-		box.y1 = 0;
-		box.x2 = output->base.width;
-		box.y2 = output->base.height;
-		pixman_region32_init_with_extents(&damage, &box);
+	if (client->context->settings->HiDefRemoteApp)
+		return TRUE;
 
+	/* sends a full refresh */
+	pixman_region32_init(&damage);
+	wl_list_for_each(output, &b->compositor->output_list, link) {
+		pixman_region32_union_rect(&damage, &damage,
+					   output->x, output->y,
+					   output->width, output->height);
+		/* we're limited to one output for now */
+		break;
+	}
+
+	if (output)
 		rdp_peer_refresh_region(&damage, client);
 
-		pixman_region32_fini(&damage);
-	}
+	pixman_region32_fini(&damage);
 
 	return TRUE;
 }
