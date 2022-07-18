@@ -564,8 +564,8 @@ to_weston_coordinate(RdpPeerContext *peerContext, int32_t *x, int32_t *y, uint32
 			if (width && height)
 				to_weston_scale_only(peerContext, output, scale, width, height);
 			/* translate x/y to offset from this output on weston space. */
-			sx += head_iter->monitorMode.rectWeston.x;
-			sy += head_iter->monitorMode.rectWeston.y;
+			sx += output->x;
+			sy += output->y;
 			rdp_debug_verbose(b, "%s: (x:%d, y:%d) -> (sx:%d, sy:%d) at head:%s\n",
 					  __func__, *x, *y, sx, sy, head_iter->base.name);
 			*x = sx;
@@ -600,8 +600,8 @@ to_client_coordinate(RdpPeerContext *peerContext, struct weston_output *output, 
 		float scale = head->monitorMode.clientScale;
 
 		/* translate x/y to offset from this output on weston space. */
-		sx -= head->monitorMode.rectWeston.x;
-		sy -= head->monitorMode.rectWeston.y;
+		sx -= output->x;
+		sy -= output->y;
 		/* scale x/y to client output space. */
 		to_client_scale_only(peerContext, output, scale, &sx, &sy);
 		if (width && height)
