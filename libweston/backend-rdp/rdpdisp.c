@@ -105,13 +105,13 @@ disp_start_monitor_layout_change(freerdp_peer *client, struct rdp_monitor_mode *
 	pixman_region32_init(&desktop);
 	/* move all heads to pending list */
 	wl_list_init(&b->head_pending_list);
-	wl_list_insert_list(&b->head_pending_list, &b->head_list);
-	wl_list_init(&b->head_list);
+	wl_list_insert_list(&b->head_pending_list, &b->compositor->head_list);
+	wl_list_init(&b->compositor->head_list);
 
 	/* init move pending list */
 	wl_list_init(&b->head_move_pending_list);
 	for (UINT32 i = 0; i < monitorCount; i++, monitorMode++) {
-		struct rdp_head *current, *tmp;
+		struct weston_head *iter, *tmp;
 		/* accumulate monitor layout */
 		pixman_region32_union_rect(&desktop, &desktop,
 					   monitorMode->monitorDef.x,
@@ -119,7 +119,9 @@ disp_start_monitor_layout_change(freerdp_peer *client, struct rdp_monitor_mode *
 					   monitorMode->monitorDef.width,
 					   monitorMode->monitorDef.height);
 
-		wl_list_for_each_safe(current, tmp, &b->head_pending_list, link) {
+		wl_list_for_each_safe(iter, tmp, &b->head_pending_list, compositor_link) {
+			struct rdp_head *current = to_rdp_head(iter);
+
 			if (memcmp(&current->monitorMode, monitorMode, sizeof(*monitorMode)) == 0) {
 				rdp_debug_verbose(b, "Head mode exact match:%s, x:%d, y:%d, width:%d, height:%d, is_primary: %d\n",
 					current->base.name,
@@ -127,8 +129,8 @@ disp_start_monitor_layout_change(freerdp_peer *client, struct rdp_monitor_mode *
 					current->monitorMode.monitorDef.width, current->monitorMode.monitorDef.height,
 					current->monitorMode.monitorDef.is_primary);
 				/* move from pending list to move pending list */
-				wl_list_remove(&current->link);
-				wl_list_insert(&b->head_move_pending_list, &current->link);
+				wl_list_remove(&iter->compositor_link);
+				wl_list_insert(&b->head_move_pending_list, &iter->compositor_link);
 				*doneIndex |= (1 << i);
 				break;
 			}
@@ -146,15 +148,17 @@ disp_end_monitor_layout_change(freerdp_peer *client)
 {
 	RdpPeerContext *peerCtx = (RdpPeerContext *)client->context;
 	struct rdp_backend *b = peerCtx->rdpBackend;
-	struct rdp_head *current, *next;
+	struct weston_head *iter, *next;
 
 	assert_compositor_thread(b);
 
 	/* move output to final location */
-	wl_list_for_each_safe(current, next, &b->head_move_pending_list, link) {
+	wl_list_for_each_safe(iter, next, &b->head_move_pending_list, compositor_link) {
+		struct rdp_head *current = to_rdp_head(iter);
+
 		/* move from move pending list to current list */
-		wl_list_remove(&current->link);
-		wl_list_insert(&b->head_list, &current->link);
+		wl_list_remove(&iter->compositor_link);
+		wl_list_insert(&b->compositor->head_list, &iter->compositor_link);
 		if (current->base.output) {
 			rdp_debug(b, "move head/output %s (%d,%d) -> (%d,%d)\n",
 				current->base.name,
@@ -175,17 +179,19 @@ disp_end_monitor_layout_change(freerdp_peer *client)
 	wl_list_init(&b->head_move_pending_list);
 	/* remove all unsed head from pending list */
 	if (!wl_list_empty(&b->head_pending_list)) {
-		wl_list_for_each_safe(current, next, &b->head_pending_list, link)
-			rdp_head_destroy(b->compositor, current);
+		wl_list_for_each_safe(iter, next, &b->head_pending_list, compositor_link)
+			rdp_head_destroy(b->compositor, to_rdp_head(iter));
 		/* make sure nothing left in pending list */
 		assert(wl_list_empty(&b->head_pending_list));
 		wl_list_init(&b->head_pending_list);
 	}
 	/* make sure head list is not empty */
-	assert(!wl_list_empty(&b->head_list));
+	assert(!wl_list_empty(&b->compositor->head_list));
 
 	BOOL is_primary_found = FALSE;
-	wl_list_for_each(current, &b->head_list, link) {
+	wl_list_for_each(iter, &b->compositor->head_list, compositor_link) {
+		struct rdp_head *current = to_rdp_head(iter);
+
 		if (current->monitorMode.monitorDef.is_primary) {
 			rdp_debug(b, "client origin (0,0) is (%d,%d) in Weston space\n", 
 				current->monitorMode.rectWeston.x,
@@ -208,13 +214,15 @@ disp_set_monitor_layout_change(freerdp_peer *client, struct rdp_monitor_mode *mo
 	rdpSettings *settings = client->context->settings;
 	struct weston_output *output = NULL;
 	struct weston_head *head = NULL;
-	struct rdp_head *current;
+	struct weston_head *iter;
 	BOOL updateMode = FALSE;
 
 	assert_compositor_thread(b);
 
 	/* search head match configuration from pending list */
-	wl_list_for_each(current, &b->head_pending_list, link) {
+	wl_list_for_each(iter, &b->head_pending_list, compositor_link) {
+		struct rdp_head *current = to_rdp_head(iter);
+
 		if (current->monitorMode.monitorDef.is_primary != monitorMode->monitorDef.is_primary)
 			continue;
 
@@ -236,7 +244,9 @@ disp_set_monitor_layout_change(freerdp_peer *client, struct rdp_monitor_mode *mo
 	}
 	if (!head) {
 		/* just pick first one to change mode */
-		wl_list_for_each(current, &b->head_pending_list, link) {
+		wl_list_for_each(iter, &b->head_pending_list, compositor_link) {
+			struct rdp_head *current = to_rdp_head(iter);
+
 			/* primary is only re-used for primary */
 			if (!current->monitorMode.monitorDef.is_primary) {
 				head = &current->base;
@@ -248,8 +258,9 @@ disp_set_monitor_layout_change(freerdp_peer *client, struct rdp_monitor_mode *mo
 	}
 
 	if (head) {
+		struct rdp_head *current = to_rdp_head(head);
+
 		assert(output);
-		assert(to_rdp_head(head) == current);
 		rdp_debug(b, "Head mode change:%s OLD width:%d, height:%d, scale:%d, clientScale:%f\n",
 			output->name, current->monitorMode.monitorDef.width,
 				      current->monitorMode.monitorDef.height,
@@ -263,8 +274,8 @@ disp_set_monitor_layout_change(freerdp_peer *client, struct rdp_monitor_mode *mo
 			monitorMode->monitorDef.x, monitorMode->monitorDef.y,
 			monitorMode->monitorDef.width, monitorMode->monitorDef.height);
 		/* move from pending list to move pending list */
-		wl_list_remove(&current->link);
-		wl_list_insert(&b->head_move_pending_list, &to_rdp_head(head)->link);
+		wl_list_remove(&head->compositor_link);
+		wl_list_insert(&b->head_move_pending_list, &head->compositor_link);
 	} else {
 		/* no head found, create one */
 		if (rdp_head_create(b->compositor, monitorMode->monitorDef.is_primary, monitorMode) == NULL)
@@ -558,17 +569,19 @@ to_weston_coordinate(RdpPeerContext *peerContext, int32_t *x, int32_t *y, uint32
 {
 	struct rdp_backend *b = peerContext->rdpBackend;
 	int sx = *x, sy = *y;
-	struct rdp_head *head_iter;
+	struct weston_head *head_iter;
 
 	/* First, find which monitor contains this x/y. */
-	wl_list_for_each(head_iter, &b->head_list, link) {
-		if (pixman_region32_contains_point(&head_iter->regionClient, sx, sy, NULL)) {
-			struct weston_output *output = head_iter->base.output;
-			float scale = 1.0f / head_iter->monitorMode.clientScale;
+	wl_list_for_each(head_iter, &b->compositor->head_list, compositor_link) {
+		struct rdp_head *head = to_rdp_head(head_iter);
+
+		if (pixman_region32_contains_point(&head->regionClient, sx, sy, NULL)) {
+			struct weston_output *output = head->base.output;
+			float scale = 1.0f / head->monitorMode.clientScale;
 
 			/* translate x/y to offset from this output on client space. */
-			sx -= head_iter->monitorMode.monitorDef.x;
-			sy -= head_iter->monitorMode.monitorDef.y;
+			sx -= head->monitorMode.monitorDef.x;
+			sy -= head->monitorMode.monitorDef.y;
 			/* scale x/y to client output space. */
 			to_weston_scale_only(peerContext, output, scale, &sx, &sy);
 			if (width && height)
@@ -577,7 +590,7 @@ to_weston_coordinate(RdpPeerContext *peerContext, int32_t *x, int32_t *y, uint32
 			sx += output->x;
 			sy += output->y;
 			rdp_debug_verbose(b, "%s: (x:%d, y:%d) -> (sx:%d, sy:%d) at head:%s\n",
-					  __func__, *x, *y, sx, sy, head_iter->base.name);
+					  __func__, *x, *y, sx, sy, head->base.name);
 			*x = sx;
 			*y = sy;
 			return output; // must be only 1 head per output.

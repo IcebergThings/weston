@@ -3730,15 +3730,17 @@ rdp_rail_dump_monitor_binding(struct weston_keyboard *keyboard,
 {
 	struct rdp_backend *b = (struct rdp_backend *)data;
 	if (b) {
-		struct rdp_head *current;
+		struct weston_head *current;
 		int err;
 		char *str;
 		size_t len;
 		FILE *fp = open_memstream(&str, &len);
 		assert(fp);
 		fprintf(fp,"\nrdp debug binding 'M' - dump all monitor.\n");
-		wl_list_for_each(current, &b->head_list, link) {
-			print_rdp_head(fp, current);
+		wl_list_for_each(current, &b->compositor->head_list, compositor_link) {
+			struct rdp_head *head = to_rdp_head(current);
+
+			print_rdp_head(fp, head);
 			fprintf(fp,"\n");
 		}
 		err = fclose(fp);
@@ -4263,10 +4265,13 @@ static struct weston_output *
 rdp_rail_get_primary_output(void *rdp_backend)
 {
 	struct rdp_backend *b = (struct rdp_backend*)rdp_backend;
-	struct rdp_head *current;
-	wl_list_for_each(current, &b->head_list, link) {
-		if (current->monitorMode.monitorDef.is_primary)
-			return current->base.output;
+	struct weston_head *current;
+
+	wl_list_for_each(current, &b->compositor->head_list, compositor_link) {
+		struct rdp_head *head = to_rdp_head(current);
+
+		if (head->monitorMode.monitorDef.is_primary)
+			return current->output;
 	}
 	return NULL;
 }

@@ -710,7 +710,6 @@ rdp_head_create(struct weston_compositor *compositor, BOOL isPrimary, struct rdp
 		rdp_debug(b, "Default head is being added\n");
 
 	head->monitorMode.monitorDef.is_primary = isPrimary;
-	wl_list_insert(&b->head_list, &head->link);
 	sprintf(name, "rdp-%x", head->index);
 
 	weston_head_init(&head->base, name);
@@ -724,7 +723,6 @@ void
 rdp_head_destroy(struct weston_compositor *compositor, struct rdp_head *head)
 {
 	weston_head_release(&head->base);
-	wl_list_remove(&head->link);
 	pixman_region32_fini(&head->regionClient);
 	free(head);
 }
@@ -765,8 +763,6 @@ rdp_destroy(struct weston_compositor *ec)
 
 	wl_list_for_each_safe(base, next, &ec->head_list, compositor_link)
 		rdp_head_destroy(ec, to_rdp_head(base));
-
-	assert(wl_list_empty(&b->head_list));
 
 	freerdp_listener_free(b->listener);
 
@@ -2187,7 +2183,6 @@ rdp_backend_create(struct weston_compositor *compositor,
 
 	wl_list_init(&b->output_list);
 	wl_list_init(&b->peers);
-	wl_list_init(&b->head_list);
 	b->head_index = 0;
 
 	b->debug = weston_log_ctx_add_log_scope(compositor->weston_log_ctx,
