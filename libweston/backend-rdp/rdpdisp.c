@@ -312,22 +312,16 @@ disp_set_monitor_layout_change(freerdp_peer *client, struct rdp_monitor_mode *mo
 	return 0;
 }
 
-static BOOL
-disp_monitor_validate_and_compute_layout(RdpPeerContext *peerCtx, struct rdp_monitor_mode *monitorMode, UINT32 monitorCount)
+static bool
+disp_monitor_sanity_check_layout(RdpPeerContext *peerCtx, struct rdp_monitor_mode *monitorMode, uint32_t count)
 {
 	struct rdp_backend *b = peerCtx->rdpBackend;
-	bool isConnected_H = false;
-	bool isConnected_V = false;
-	bool isScalingUsed = false;
-	bool isScalingSupported = true;
 	uint32_t primaryCount = 0;
-	int upperLeftX = 0;
-	int upperLeftY = 0;
 	uint32_t i;
 
 	/* dump client monitor topology */
 	rdp_debug(b, "%s:---INPUT---\n", __func__);
-	for (i = 0; i < monitorCount; i++) {
+	for (i = 0; i < count; i++) {
 		rdp_debug(b, "	rdpMonitor[%d]: x:%d, y:%d, width:%d, height:%d, is_primary:%d\n",
 			i, monitorMode[i].monitorDef.x, monitorMode[i].monitorDef.y,
 			   monitorMode[i].monitorDef.width, monitorMode[i].monitorDef.height,
@@ -343,22 +337,38 @@ disp_monitor_validate_and_compute_layout(RdpPeerContext *peerCtx, struct rdp_mon
 			i, monitorMode[i].scale, monitorMode[i].clientScale);
 	}
 
-	for (i = 0; i < monitorCount; i++) {
+	for (i = 0; i < count; i++) {
 		/* make sure there is only one primary and its position at client */
 		if (monitorMode[i].monitorDef.is_primary) {
 			/* count number of primary */
 			if (++primaryCount > 1) {
 				rdp_debug_error(b, "%s: RDP client reported unexpected primary count (%d)\n",__func__, primaryCount);
-				return FALSE;
+				return false;
 			}
 			/* primary must be at (0,0) in client space */
 			if (monitorMode[i].monitorDef.x != 0 || monitorMode[i].monitorDef.y != 0) {
 				rdp_debug_error(b, "%s: RDP client reported primary is not at (0,0) but (%d,%d).\n",
 					__func__, monitorMode[i].monitorDef.x, monitorMode[i].monitorDef.y);
-				return FALSE;
+				return false;
 			}
 		}
+	}
+	return true;
+}
 
+static void
+disp_monitor_validate_and_compute_layout(RdpPeerContext *peerCtx, struct rdp_monitor_mode *monitorMode, uint32_t monitorCount)
+{
+	struct rdp_backend *b = peerCtx->rdpBackend;
+	bool isConnected_H = false;
+	bool isConnected_V = false;
+	bool isScalingUsed = false;
+	bool isScalingSupported = true;
+	int upperLeftX = 0;
+	int upperLeftY = 0;
+	uint32_t i;
+
+	for (i = 0; i < monitorCount; i++) {
 		/* check if any monitor has scaling enabled */
 		if (monitorMode[i].clientScale != 1.0f)
 			isScalingUsed = true;
@@ -490,8 +500,6 @@ disp_monitor_validate_and_compute_layout(RdpPeerContext *peerCtx, struct rdp_mon
 		rdp_debug(b, "	rdpMonitor[%d]: scale:%d, clientScale:%3.2f\n",
 			i, monitorMode[i].scale, monitorMode[i].clientScale);
 	}
-
-	return TRUE;
 }
 
 bool
@@ -511,10 +519,12 @@ handle_adjust_monitor_layout(freerdp_peer *client, int monitor_count, rdpMonitor
 		monitorMode[i].clientScale = disp_get_client_scale_from_monitor(peerCtx, &monitorMode[i]);
 	}
 
-	if (!disp_monitor_validate_and_compute_layout(peerCtx, monitorMode, monitor_count)) {
+	if (!disp_monitor_sanity_check_layout(peerCtx, monitorMode, monitor_count)) {
 		success = true;
 		goto exit;
 	}
+
+	disp_monitor_validate_and_compute_layout(peerCtx, monitorMode, monitor_count);
 
 	int doneIndex = 0;
 	disp_start_monitor_layout_change(client, monitorMode, monitor_count, &doneIndex);
