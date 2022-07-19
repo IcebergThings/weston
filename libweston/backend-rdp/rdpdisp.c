@@ -265,15 +265,11 @@ disp_start_monitor_layout_change(freerdp_peer *client, struct rdp_monitor_mode *
 }
 
 static void
-disp_end_monitor_layout_change(freerdp_peer *client)
+disp_end_monitor_layout_change(struct weston_compositor *ec)
 {
-	RdpPeerContext *peerCtx = (RdpPeerContext *)client->context;
-	struct rdp_backend *b = peerCtx->rdpBackend;
 	struct weston_head *iter, *next;
 
-	assert_compositor_thread(b);
-
-	wl_list_for_each_safe(iter, next, &b->compositor->head_list, compositor_link) {
+	wl_list_for_each_safe(iter, next, &ec->head_list, compositor_link) {
 		struct rdp_head *current = to_rdp_head(iter);
 		struct weston_output *output = iter->output;
 
@@ -283,7 +279,7 @@ disp_end_monitor_layout_change(freerdp_peer *client)
 
 			new_mode.width = current->monitorMode.monitorDef.width;
 			new_mode.height = current->monitorMode.monitorDef.height;
-			rdp_debug(b, "Head mode change:%s NEW width:%d, height:%d, scale:%d, clientScale:%f\n",
+			weston_log("Head mode change:%s NEW width:%d, height:%d, scale:%d, clientScale:%f\n",
 				  output->name, current->monitorMode.monitorDef.width,
 				  current->monitorMode.monitorDef.height,
 				  current->monitorMode.scale,
@@ -305,16 +301,16 @@ disp_end_monitor_layout_change(freerdp_peer *client)
 			assert(output->height == (int32_t)current->monitorMode.rectWeston.height);
 		} else {
 			/* if head doesn't have output yet, mode is set at rdp_output_set_size */
-			rdp_debug(b, "output doesn't exist for head %s\n", iter->name);
+			weston_log("output doesn't exist for head %s\n", iter->name);
 		}
 	}
 
 	/* move output to final location */
-	wl_list_for_each_safe(iter, next, &b->compositor->head_list, compositor_link) {
+	wl_list_for_each_safe(iter, next, &ec->head_list, compositor_link) {
 		struct rdp_head *current = to_rdp_head(iter);
 
 		if (current->base.output) {
-			rdp_debug(b, "move head/output %s (%d,%d) -> (%d,%d)\n",
+			weston_log("move head/output %s (%d,%d) -> (%d,%d)\n",
 				current->base.name,
 				current->base.output->x,
 				current->base.output->y,
@@ -331,14 +327,14 @@ disp_end_monitor_layout_change(freerdp_peer *client)
 	}
 
 	/* make sure head list is not empty */
-	assert(!wl_list_empty(&b->compositor->head_list));
+	assert(!wl_list_empty(&ec->head_list));
 
 	BOOL is_primary_found = FALSE;
-	wl_list_for_each(iter, &b->compositor->head_list, compositor_link) {
+	wl_list_for_each(iter, &ec->head_list, compositor_link) {
 		struct rdp_head *current = to_rdp_head(iter);
 
 		if (current->monitorMode.monitorDef.is_primary) {
-			rdp_debug(b, "client origin (0,0) is (%d,%d) in Weston space\n", 
+			weston_log("client origin (0,0) is (%d,%d) in Weston space\n",
 				current->monitorMode.rectWeston.x,
 				current->monitorMode.rectWeston.y);
 			/* primary must be at (0,0) in client space */
@@ -567,7 +563,7 @@ handle_adjust_monitor_layout(freerdp_peer *client, int monitor_count, rdpMonitor
 	disp_monitor_validate_and_compute_layout(peerCtx, monitorMode, monitor_count);
 
 	disp_start_monitor_layout_change(client, monitorMode, monitor_count);
-	disp_end_monitor_layout_change(client);
+	disp_end_monitor_layout_change(b->compositor);
 
 exit:
 	free(monitorMode);
