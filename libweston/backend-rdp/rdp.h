@@ -91,7 +91,6 @@ struct rdp_backend {
 	freerdp_listener *listener;
 	struct wl_event_source *listener_events[MAX_FREERDP_FDS];
 	struct wl_list output_list; // rdp_output::link
-	struct wl_list head_pending_list; // used during monitor layout change.
 	uint32_t head_index;
 	struct weston_log_scope *debug;
 	uint32_t debugLevel;
@@ -187,6 +186,7 @@ struct rdp_head {
 	struct weston_head base;
 	uint32_t index;
 	struct rdp_monitor_mode monitorMode;
+	bool matched;
 	/*TODO: these region/rectangles can be moved to rdp_output */
 	pixman_region32_t regionClient; // in client coordnate.
 	pixman_rectangle32_t workareaClient; // in client coordinate.

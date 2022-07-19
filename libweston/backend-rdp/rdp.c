@@ -691,9 +691,7 @@ rdp_head_create(struct weston_compositor *compositor, BOOL isPrimary, struct rdp
 	struct rdp_head *head;
 	char name[13] = {}; // 'rdp-' + 8 chars for hex uint32_t + NULL.
 
-	head = zalloc(sizeof *head);
-	if (!head)
-		return NULL;
+	head = xzalloc(sizeof *head);
 
 	head->index = b->head_index++;
 	if (monitorMode) {
