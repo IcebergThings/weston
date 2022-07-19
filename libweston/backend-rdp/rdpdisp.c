@@ -108,8 +108,6 @@ disp_start_monitor_layout_change(freerdp_peer *client, struct rdp_monitor_mode *
 	wl_list_insert_list(&b->head_pending_list, &b->compositor->head_list);
 	wl_list_init(&b->compositor->head_list);
 
-	/* init move pending list */
-	wl_list_init(&b->head_move_pending_list);
 	for (UINT32 i = 0; i < monitorCount; i++, monitorMode++) {
 		struct weston_head *iter, *tmp;
 		/* accumulate monitor layout */
@@ -128,9 +126,8 @@ disp_start_monitor_layout_change(freerdp_peer *client, struct rdp_monitor_mode *
 					current->monitorMode.monitorDef.x, current->monitorMode.monitorDef.y,
 					current->monitorMode.monitorDef.width, current->monitorMode.monitorDef.height,
 					current->monitorMode.monitorDef.is_primary);
-				/* move from pending list to move pending list */
 				wl_list_remove(&iter->compositor_link);
-				wl_list_insert(&b->head_move_pending_list, &iter->compositor_link);
+				wl_list_insert(&b->compositor->head_list, &iter->compositor_link);
 				*doneIndex |= (1 << i);
 				break;
 			}
@@ -153,12 +150,9 @@ disp_end_monitor_layout_change(freerdp_peer *client)
 	assert_compositor_thread(b);
 
 	/* move output to final location */
-	wl_list_for_each_safe(iter, next, &b->head_move_pending_list, compositor_link) {
+	wl_list_for_each_safe(iter, next, &b->compositor->head_list, compositor_link) {
 		struct rdp_head *current = to_rdp_head(iter);
 
-		/* move from move pending list to current list */
-		wl_list_remove(&iter->compositor_link);
-		wl_list_insert(&b->compositor->head_list, &iter->compositor_link);
 		if (current->base.output) {
 			rdp_debug(b, "move head/output %s (%d,%d) -> (%d,%d)\n",
 				current->base.name,
@@ -175,8 +169,6 @@ disp_end_monitor_layout_change(freerdp_peer *client)
 			/* position will be set at rdp_output_enable */
 		}
 	}
-	assert(wl_list_empty(&b->head_move_pending_list));
-	wl_list_init(&b->head_move_pending_list);
 	/* remove all unsed head from pending list */
 	if (!wl_list_empty(&b->head_pending_list)) {
 		wl_list_for_each_safe(iter, next, &b->head_pending_list, compositor_link)
@@ -273,9 +265,8 @@ disp_set_monitor_layout_change(freerdp_peer *client, struct rdp_monitor_mode *mo
 		pixman_region32_init_rect(&current->regionClient,
 			monitorMode->monitorDef.x, monitorMode->monitorDef.y,
 			monitorMode->monitorDef.width, monitorMode->monitorDef.height);
-		/* move from pending list to move pending list */
 		wl_list_remove(&head->compositor_link);
-		wl_list_insert(&b->head_move_pending_list, &head->compositor_link);
+		wl_list_insert(&b->compositor->head_list, &head->compositor_link);
 	} else {
 		/* no head found, create one */
 		if (rdp_head_create(b->compositor, monitorMode->monitorDef.is_primary, monitorMode) == NULL)

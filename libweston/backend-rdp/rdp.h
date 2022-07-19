@@ -92,7 +92,6 @@ struct rdp_backend {
 	struct wl_event_source *listener_events[MAX_FREERDP_FDS];
 	struct wl_list output_list; // rdp_output::link
 	struct wl_list head_pending_list; // used during monitor layout change.
-	struct wl_list head_move_pending_list; // used during monitor layout change.
 	uint32_t head_index;
 	struct weston_log_scope *debug;
 	uint32_t debugLevel;
