@@ -66,31 +66,29 @@ compare_monitors_y(const void *p1, const void *p2)
 }
 
 static float
-disp_get_client_scale_from_monitor(RdpPeerContext *peerCtx, struct rdp_monitor_mode *monitorMode)
+disp_get_client_scale_from_monitor(struct rdp_backend *b, const rdpMonitor *config)
 {
-	struct rdp_backend *b = peerCtx->rdpBackend;
-
-	if (monitorMode->monitorDef.attributes.desktopScaleFactor == 0.0)
+	if (config->attributes.desktopScaleFactor == 0.0)
 		return 1.0f;
 
 	if (b->enable_hi_dpi_support) {
 		if (b->debug_desktop_scaling_factor)
 			return (float)b->debug_desktop_scaling_factor / 100.f;
 		else if (b->enable_fractional_hi_dpi_support)
-			return (float)monitorMode->monitorDef.attributes.desktopScaleFactor / 100.0f;
+			return (float)config->attributes.desktopScaleFactor / 100.0f;
 		else if (b->enable_fractional_hi_dpi_roundup)
-			return (float)(int)((monitorMode->monitorDef.attributes.desktopScaleFactor + 50) / 100);
+			return (float)(int)((config->attributes.desktopScaleFactor + 50) / 100);
 		else
-			return (float)(int)(monitorMode->monitorDef.attributes.desktopScaleFactor / 100);
+			return (float)(int)(config->attributes.desktopScaleFactor / 100);
 	} else {
 		return 1.0f;
 	}
 }
 
 static int
-disp_get_output_scale_from_monitor(RdpPeerContext *peerCtx, struct rdp_monitor_mode *monitorMode)
+disp_get_output_scale_from_monitor(struct rdp_backend *b, rdpMonitor *config)
 {
-	return (int) disp_get_client_scale_from_monitor(peerCtx, monitorMode);
+	return (int) disp_get_client_scale_from_monitor(b, config);
 }
 
 static void
@@ -508,6 +506,7 @@ bool
 handle_adjust_monitor_layout(freerdp_peer *client, int monitor_count, rdpMonitor *monitors)
 {
 	RdpPeerContext *peerCtx = (RdpPeerContext *)client->context;
+	struct rdp_backend *b = peerCtx->rdpBackend;
 	bool success = true;
 	struct rdp_monitor_mode *monitorMode = NULL;
 	int i;
@@ -517,8 +516,8 @@ handle_adjust_monitor_layout(freerdp_peer *client, int monitor_count, rdpMonitor
 	for (i = 0; i < monitor_count; i++) {
 		monitorMode[i].monitorDef = monitors[i];
 		monitorMode[i].monitorDef.orig_screen = 0;
-		monitorMode[i].scale = disp_get_output_scale_from_monitor(peerCtx, &monitorMode[i]);
-		monitorMode[i].clientScale = disp_get_client_scale_from_monitor(peerCtx, &monitorMode[i]);
+		monitorMode[i].scale = disp_get_output_scale_from_monitor(b, &monitorMode[i].monitorDef);
+		monitorMode[i].clientScale = disp_get_client_scale_from_monitor(b, &monitorMode[i].monitorDef);
 	}
 
 	if (!disp_monitor_sanity_check_layout(peerCtx, monitorMode, monitor_count)) {
