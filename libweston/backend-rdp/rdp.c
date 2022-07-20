@@ -479,7 +479,7 @@ rdp_output_get_config(struct weston_output *base,
 				/* Return true client resolution (not adjusted by DPI) */
 				*width = h->monitorMode.monitorDef.width;
 				*height = h->monitorMode.monitorDef.height;
-				*scale = h->monitorMode.scale;
+				*scale = disp_get_output_scale_from_monitor(rdpBackend, &h->monitorMode.monitorDef);
 			}
 			break; // only one head per output in HiDef.
 		}
@@ -688,7 +688,6 @@ rdp_head_create(struct weston_compositor *compositor, BOOL isPrimary, struct rdp
 			monitorMode->monitorDef.width, monitorMode->monitorDef.height);
 	} else {
 		head->monitorMode.monitorDef.attributes.desktopScaleFactor = 0.0;
-		head->monitorMode.scale = 1.0f;
 		pixman_region32_init(&head->regionClient);
 	}
 	if (isPrimary)

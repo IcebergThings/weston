@@ -3689,6 +3689,7 @@ print_rdp_head(FILE *fp, const struct rdp_head *current)
 	struct weston_compositor *ec = wh->compositor;
 	struct rdp_backend *b = to_rdp_backend(ec);
 	float client_scale = disp_get_client_scale_from_monitor(b, &current->monitorMode.monitorDef);
+	int scale = disp_get_output_scale_from_monitor(b, &current->monitorMode.monitorDef);
 
 	fprintf(fp,"    rdp_head: %s: index:%d: is_primary:%d\n",
 		current->base.name, current->index,
@@ -3707,7 +3708,7 @@ print_rdp_head(FILE *fp, const struct rdp_head *current)
 		current->monitorMode.monitorDef.attributes.desktopScaleFactor,
 		current->monitorMode.monitorDef.attributes.deviceScaleFactor);
 	fprintf(fp,"    scale:%d, client scale :%3.2f\n",
-		current->monitorMode.scale, client_scale);
+		scale, client_scale);
 	fprintf(fp,"    workarea: x:%d, y:%d, width:%d, height:%d\n",
 		current->workarea.x, current->workarea.y,
 		current->workarea.width, current->workarea.height);
