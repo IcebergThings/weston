@@ -356,7 +356,8 @@ disp_monitor_validate_and_compute_layout(struct weston_compositor *ec)
 	int upperLeftX = 0;
 	int upperLeftY = 0;
 	int i;
-	int count;
+	int count = wl_list_length(&ec->head_list);
+	pixman_rectangle32_t rectWeston[count];
 
 	wl_list_for_each(iter, &ec->head_list, compositor_link) {
 		struct rdp_head *head = to_rdp_head(iter);
@@ -466,38 +467,44 @@ disp_monitor_validate_and_compute_layout(struct weston_compositor *ec)
 
 	if (isScalingUsed && isScalingSupported) {
 		uint32_t offsetFromOriginWeston = 0;
+		i = 0;
 
 		wl_list_for_each(iter, &ec->head_list, compositor_link) {
 			struct rdp_head *head = to_rdp_head(iter);
 
-			head->monitorMode.rectWeston.width = head->monitorMode.monitorDef.width / head->monitorMode.scale;
-			head->monitorMode.rectWeston.height = head->monitorMode.monitorDef.height / head->monitorMode.scale;
+			rectWeston[i].width = head->monitorMode.monitorDef.width / head->monitorMode.scale;
+			rectWeston[i].height = head->monitorMode.monitorDef.height / head->monitorMode.scale;
 			if (isConnected_H) {
 				assert(isConnected_V == false);
-				head->monitorMode.rectWeston.x = offsetFromOriginWeston;
-				head->monitorMode.rectWeston.y = abs((upperLeftY - head->monitorMode.monitorDef.y) / head->monitorMode.scale);
-				offsetFromOriginWeston += head->monitorMode.rectWeston.width;
+				rectWeston[i].x = offsetFromOriginWeston;
+				rectWeston[i].y = abs((upperLeftY - head->monitorMode.monitorDef.y) / head->monitorMode.scale);
+				offsetFromOriginWeston += rectWeston[i].width;
 			} else {
 				assert(isConnected_V == true);
-				head->monitorMode.rectWeston.x = abs((upperLeftX - head->monitorMode.monitorDef.x) / head->monitorMode.scale);
-				head->monitorMode.rectWeston.y = offsetFromOriginWeston;
-				offsetFromOriginWeston += head->monitorMode.rectWeston.height;
+				rectWeston[i].x = abs((upperLeftX - head->monitorMode.monitorDef.x) / head->monitorMode.scale);
+				rectWeston[i].y = offsetFromOriginWeston;
+				offsetFromOriginWeston += rectWeston[i].height;
 			}
-			assert(head->monitorMode.rectWeston.x >= 0);
-			assert(head->monitorMode.rectWeston.y >= 0);
+			assert(rectWeston[i].x >= 0);
+			assert(rectWeston[i].y >= 0);
+			i++;
 		}
 	} else {
+		i = 0;
+
 		/* no scaling is used or monitor placement is too complex to scale in weston space, fallback to 1.0f */
 		wl_list_for_each(iter, &ec->head_list, compositor_link) {
 			struct rdp_head *head = to_rdp_head(iter);
-			head->monitorMode.rectWeston.width = head->monitorMode.monitorDef.width;
-			head->monitorMode.rectWeston.height = head->monitorMode.monitorDef.height;
-			head->monitorMode.rectWeston.x = head->monitorMode.monitorDef.x + abs(upperLeftX);
-			head->monitorMode.rectWeston.y = head->monitorMode.monitorDef.y + abs(upperLeftY);
-			assert(head->monitorMode.rectWeston.x >= 0);
-			assert(head->monitorMode.rectWeston.y >= 0);
+
+			rectWeston[i].width = head->monitorMode.monitorDef.width;
+			rectWeston[i].height = head->monitorMode.monitorDef.height;
+			rectWeston[i].x = head->monitorMode.monitorDef.x + abs(upperLeftX);
+			rectWeston[i].y = head->monitorMode.monitorDef.y + abs(upperLeftY);
+			assert(rectWeston[i].x >= 0);
+			assert(rectWeston[i].y >= 0);
 			head->monitorMode.scale = 1;
 			head->monitorMode.clientScale = 1.0f;
+			i++;
 		}
 	}
 
@@ -511,8 +518,8 @@ disp_monitor_validate_and_compute_layout(struct weston_compositor *ec)
 			   head->monitorMode.monitorDef.width, head->monitorMode.monitorDef.height,
 			   head->monitorMode.monitorDef.is_primary);
 		weston_log("	rdpMonitor[%d]: weston x:%d, y:%d, width:%d, height:%d\n",
-			i, head->monitorMode.rectWeston.x, head->monitorMode.rectWeston.y,
-			   head->monitorMode.rectWeston.width, head->monitorMode.rectWeston.height);
+			i, rectWeston[i].x, rectWeston[i].y,
+			   rectWeston[i].width, rectWeston[i].height);
 		weston_log("	rdpMonitor[%d]: physicalWidth:%d, physicalHeight:%d, orientation:%d\n",
 			i, head->monitorMode.monitorDef.attributes.physicalWidth,
 			   head->monitorMode.monitorDef.attributes.physicalHeight,
@@ -525,6 +532,7 @@ disp_monitor_validate_and_compute_layout(struct weston_compositor *ec)
 		i++;
 	}
 
+	i = 0;
 	wl_list_for_each(iter, &ec->head_list, compositor_link) {
 		struct rdp_head *current = to_rdp_head(iter);
 		struct weston_output *output = iter->output;
@@ -553,15 +561,17 @@ disp_monitor_validate_and_compute_layout(struct weston_compositor *ec)
 			/* Notify clients for updated resolution/scale. */
 			weston_output_set_transform(output, WL_OUTPUT_TRANSFORM_NORMAL);
 			/* output size must match with monitor's rect in weston space */
-			assert(output->width == (int32_t)current->monitorMode.rectWeston.width);
-			assert(output->height == (int32_t)current->monitorMode.rectWeston.height);
+			assert(output->width == (int32_t)rectWeston[i].width);
+			assert(output->height == (int32_t)rectWeston[i].height);
 		} else {
 			/* if head doesn't have output yet, mode is set at rdp_output_set_size */
 			weston_log("output doesn't exist for head %s\n", iter->name);
 		}
+		i++;
 	}
 
 	/* move output to final location */
+	i = 0;
 	wl_list_for_each(iter, &ec->head_list, compositor_link) {
 		struct rdp_head *current = to_rdp_head(iter);
 
@@ -570,29 +580,31 @@ disp_monitor_validate_and_compute_layout(struct weston_compositor *ec)
 				current->base.name,
 				current->base.output->x,
 				current->base.output->y,
-				current->monitorMode.rectWeston.x,
-				current->monitorMode.rectWeston.y);
+				rectWeston[i].x,
+				rectWeston[i].y);
 			/* Notify clients for updated output position. */
 			weston_output_move(current->base.output,
-				current->monitorMode.rectWeston.x,
-				current->monitorMode.rectWeston.y);
+				rectWeston[i].x,
+				rectWeston[i].y);
 		} else {
 			/* newly created head doesn't have output yet */
 			/* position will be set at rdp_output_enable */
 		}
+		i++;
 	}
 
 	/* make sure head list is not empty */
 	assert(!wl_list_empty(&ec->head_list));
 
 	BOOL is_primary_found = FALSE;
+	i = 0;
 	wl_list_for_each(iter, &ec->head_list, compositor_link) {
 		struct rdp_head *current = to_rdp_head(iter);
 
 		if (current->monitorMode.monitorDef.is_primary) {
 			weston_log("client origin (0,0) is (%d,%d) in Weston space\n",
-				current->monitorMode.rectWeston.x,
-				current->monitorMode.rectWeston.y);
+				rectWeston[i].x,
+				rectWeston[i].y);
 			/* primary must be at (0,0) in client space */
 			assert(current->monitorMode.monitorDef.x == 0);
 			assert(current->monitorMode.monitorDef.y == 0);
@@ -600,6 +612,7 @@ disp_monitor_validate_and_compute_layout(struct weston_compositor *ec)
 			assert(is_primary_found == FALSE);
 			is_primary_found = TRUE;
 		}
+		i++;
 	}
 }
 

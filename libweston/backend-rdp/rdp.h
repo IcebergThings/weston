@@ -179,7 +179,6 @@ struct rdp_monitor_mode {
 	rdpMonitor monitorDef; // in client coordinate.
 	int scale; // per monitor DPI scaling.
 	float clientScale;
-	pixman_rectangle32_t rectWeston; // in weston coordinate.
 };
 
 struct rdp_head {

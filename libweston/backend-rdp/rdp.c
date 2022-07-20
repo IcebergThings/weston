@@ -564,20 +564,7 @@ rdp_output_enable(struct weston_output *base)
 	if (b->rdp_peer && b->rdp_peer->context->settings->HiDefRemoteApp)
 		HiDefRemoteApp = true;
 
-	if (HiDefRemoteApp) {
-		struct weston_head *eh;
-		wl_list_for_each(eh, &output->base.head_list, output_link) {
-			struct rdp_head *h = to_rdp_head(eh);
-			rdp_debug(b, "move head/output %s (%d,%d) -> (%d,%d)\n",
-				output->base.name, output->base.x, output->base.y,
-				h->monitorMode.rectWeston.x,
-				h->monitorMode.rectWeston.y);
-			weston_output_move(&output->base,
-				h->monitorMode.rectWeston.x,
-				h->monitorMode.rectWeston.y);
-			break; // must be only 1 head per output.
-		}
-	} else {
+	if (!HiDefRemoteApp) {
 		output->shadow_surface = pixman_image_create_bits(PIXMAN_x8r8g8b8,
 								  output->base.current_mode->width,
 								  output->base.current_mode->height,
