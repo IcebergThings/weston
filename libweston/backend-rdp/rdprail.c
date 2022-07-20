@@ -3685,6 +3685,11 @@ print_matrix(FILE *fp, const char *name, const struct weston_matrix *matrix)
 static void
 print_rdp_head(FILE *fp, const struct rdp_head *current)
 {
+	const struct weston_head *wh = &current->base;
+	struct weston_compositor *ec = wh->compositor;
+	struct rdp_backend *b = to_rdp_backend(ec);
+	float client_scale = disp_get_client_scale_from_monitor(b, &current->monitorMode.monitorDef);
+
 	fprintf(fp,"    rdp_head: %s: index:%d: is_primary:%d\n",
 		current->base.name, current->index,
 		current->monitorMode.monitorDef.is_primary);
@@ -3702,7 +3707,7 @@ print_rdp_head(FILE *fp, const struct rdp_head *current)
 		current->monitorMode.monitorDef.attributes.desktopScaleFactor,
 		current->monitorMode.monitorDef.attributes.deviceScaleFactor);
 	fprintf(fp,"    scale:%d, client scale :%3.2f\n",
-		current->monitorMode.scale, current->monitorMode.clientScale);
+		current->monitorMode.scale, client_scale);
 	fprintf(fp,"    workarea: x:%d, y:%d, width:%d, height:%d\n",
 		current->workarea.x, current->workarea.y,
 		current->workarea.width, current->workarea.height);

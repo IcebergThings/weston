@@ -178,7 +178,6 @@ struct rdp_peers_item {
 struct rdp_monitor_mode {
 	rdpMonitor monitorDef; // in client coordinate.
 	int scale; // per monitor DPI scaling.
-	float clientScale;
 };
 
 struct rdp_head {
@@ -403,6 +402,9 @@ to_weston_coordinate(RdpPeerContext *peerContext, int32_t *x, int32_t *y, uint32
 
 void
 to_client_coordinate(RdpPeerContext *peerContext, struct weston_output *output, int32_t *x, int32_t *y, uint32_t *width, uint32_t *height);
+
+float
+disp_get_client_scale_from_monitor(struct rdp_backend *b, const rdpMonitor *config);
 
 // rdpclip.c
 int rdp_clipboard_init(freerdp_peer* client);
