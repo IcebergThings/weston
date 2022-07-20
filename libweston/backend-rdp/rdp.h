@@ -175,15 +175,11 @@ struct rdp_peers_item {
 	struct wl_list link; // rdp_output::peers
 };
 
-struct rdp_monitor_mode {
-	rdpMonitor monitorDef; // in client coordinate.
-};
-
 struct rdp_head {
 	struct weston_head base;
 	uint32_t index;
-	struct rdp_monitor_mode monitorMode;
 	bool matched;
+	rdpMonitor config;
 	/*TODO: these region/rectangles can be moved to rdp_output */
 	pixman_region32_t regionClient; // in client coordnate.
 	pixman_rectangle32_t workareaClient; // in client coordinate.
@@ -343,7 +339,7 @@ struct rdp_loop_task {
 
 // rdp.c
 void convert_rdp_keyboard_to_xkb_rule_names(UINT32 KeyboardType, UINT32 KeyboardSubType, UINT32 KeyboardLayout, struct xkb_rule_names *xkbRuleNames);
-struct rdp_head * rdp_head_create(struct weston_compositor *compositor, BOOL isPrimary, struct rdp_monitor_mode *monitorMode);
+struct rdp_head * rdp_head_create(struct weston_compositor *compositor, BOOL isPrimary, rdpMonitor *config);
 void rdp_head_destroy(struct weston_compositor *compositor, struct rdp_head *head);
 
 // rdputil.c

@@ -470,16 +470,16 @@ rdp_output_get_config(struct weston_output *base,
 		rdp_debug(rdpBackend, "get_config: attached head [%d]: make:%s, mode:%s, name:%s, (%p)\n",
 			h->index, head->make, head->model, head->name, head);
 		rdp_debug(rdpBackend, "get_config: attached head [%d]: x:%d, y:%d, width:%d, height:%d\n",
-			h->index, h->monitorMode.monitorDef.x, h->monitorMode.monitorDef.y,
-				  h->monitorMode.monitorDef.width, h->monitorMode.monitorDef.height);
+			h->index, h->config.x, h->config.y,
+				  h->config.width, h->config.height);
 
 		/* In HiDef RAIL mode, get monitor resolution from RDP client if provided. */
 		if (client && client->context->settings->HiDefRemoteApp) {
-			if (h->monitorMode.monitorDef.width && h->monitorMode.monitorDef.height) {
+			if (h->config.width && h->config.height) {
 				/* Return true client resolution (not adjusted by DPI) */
-				*width = h->monitorMode.monitorDef.width;
-				*height = h->monitorMode.monitorDef.height;
-				*scale = disp_get_output_scale_from_monitor(rdpBackend, &h->monitorMode.monitorDef);
+				*width = h->config.width;
+				*height = h->config.height;
+				*scale = disp_get_output_scale_from_monitor(rdpBackend, &h->config);
 			}
 			break; // only one head per output in HiDef.
 		}
@@ -509,15 +509,15 @@ rdp_output_set_size(struct weston_output *base,
 		rdp_debug(rdpBackend, "set_size: attached head [%d]: make:%s, mode:%s, name:%s, (%p)\n",
 			h->index, head->make, head->model, head->name, head);
 		rdp_debug(rdpBackend, "set_size: attached head [%d]: x:%d, y:%d, width:%d, height:%d\n",
-			h->index, h->monitorMode.monitorDef.x, h->monitorMode.monitorDef.y,
-				  h->monitorMode.monitorDef.width, h->monitorMode.monitorDef.height);
+			h->index, h->config.x, h->config.y,
+				  h->config.width, h->config.height);
 
 		/* This is a virtual output, so report a zero physical size.
 		 * It's better to let frontends/clients use their defaults. */
 		/* If MonitorDef has it, use it from MonitorDef */
 		weston_head_set_physical_size(head,
-			h->monitorMode.monitorDef.attributes.physicalWidth,
-			h->monitorMode.monitorDef.attributes.physicalHeight);
+			h->config.attributes.physicalWidth,
+			h->config.attributes.physicalHeight);
 
 		/* In HiDef RAIL mode, set this mode as preferred mode */
 		if (client && client->context->settings->HiDefRemoteApp) {
@@ -627,7 +627,7 @@ rdp_output_attach_head(struct weston_output *output_base,
 	struct rdp_output *o = to_rdp_output(output_base);
 	struct rdp_head *h = to_rdp_head(head_base);
 	rdp_debug(b, "Head attaching: %s, index:%d, is_primary: %d\n",
-		head_base->name, h->index, h->monitorMode.monitorDef.is_primary);
+		head_base->name, h->index, h->config.is_primary);
 	if (!wl_list_empty(&output_base->head_list)) {
 		rdp_debug_error(b, "attaching more than 1 head to single output (= clone) is not supported\n");
 		return -1;
@@ -643,7 +643,7 @@ rdp_output_detach_head(struct weston_output *output_base,
 	struct rdp_backend *b = to_rdp_backend(output_base->compositor);
 	struct rdp_head *h = to_rdp_head(head_base);
 	rdp_debug(b, "Head detaching: %s, index:%d, is_primary: %d\n",
-		head_base->name, h->index, h->monitorMode.monitorDef.is_primary);
+		head_base->name, h->index, h->config.is_primary);
 }
 
 static struct weston_output *
@@ -672,7 +672,7 @@ rdp_output_create(struct weston_compositor *compositor, const char *name)
 }
 
 struct rdp_head *
-rdp_head_create(struct weston_compositor *compositor, BOOL isPrimary, struct rdp_monitor_mode *monitorMode)
+rdp_head_create(struct weston_compositor *compositor, BOOL isPrimary, rdpMonitor *config)
 {
 	struct rdp_backend *b = to_rdp_backend(compositor);
 	struct rdp_head *head;
@@ -681,19 +681,19 @@ rdp_head_create(struct weston_compositor *compositor, BOOL isPrimary, struct rdp
 	head = xzalloc(sizeof *head);
 
 	head->index = b->head_index++;
-	if (monitorMode) {
-		head->monitorMode = *monitorMode;
+	if (config) {
+		head->config = *config;
 		pixman_region32_init_rect(&head->regionClient,
-			monitorMode->monitorDef.x, monitorMode->monitorDef.y,
-			monitorMode->monitorDef.width, monitorMode->monitorDef.height);
+			config->x, config->y,
+			config->width, config->height);
 	} else {
-		head->monitorMode.monitorDef.attributes.desktopScaleFactor = 0.0;
+		head->config.attributes.desktopScaleFactor = 0.0;
 		pixman_region32_init(&head->regionClient);
 	}
 	if (isPrimary)
 		rdp_debug(b, "Default head is being added\n");
 
-	head->monitorMode.monitorDef.is_primary = isPrimary;
+	head->config.is_primary = isPrimary;
 	sprintf(name, "rdp-%x", head->index);
 
 	weston_head_init(&head->base, name);

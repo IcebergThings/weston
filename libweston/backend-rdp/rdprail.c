@@ -3688,25 +3688,25 @@ print_rdp_head(FILE *fp, const struct rdp_head *current)
 	const struct weston_head *wh = &current->base;
 	struct weston_compositor *ec = wh->compositor;
 	struct rdp_backend *b = to_rdp_backend(ec);
-	float client_scale = disp_get_client_scale_from_monitor(b, &current->monitorMode.monitorDef);
-	int scale = disp_get_output_scale_from_monitor(b, &current->monitorMode.monitorDef);
+	float client_scale = disp_get_client_scale_from_monitor(b, &current->config);
+	int scale = disp_get_output_scale_from_monitor(b, &current->config);
 
 	fprintf(fp,"    rdp_head: %s: index:%d: is_primary:%d\n",
 		current->base.name, current->index,
-		current->monitorMode.monitorDef.is_primary);
+		current->config.is_primary);
 	fprintf(fp,"    x:%d, y:%d, RDP client x:%d, y:%d\n",
 		current->base.output->x, current->base.output->y,
-		current->monitorMode.monitorDef.x, current->monitorMode.monitorDef.y);
+		current->config.x, current->config.y);
 	fprintf(fp,"    width:%d, height:%d, RDP client width:%d, height: %d\n",
 		current->base.output->width, current->base.output->height,
-		current->monitorMode.monitorDef.width, current->monitorMode.monitorDef.height);
+		current->config.width, current->config.height);
 	fprintf(fp,"    physicalWidth:%dmm, physicalHeight:%dmm, orientation:%d\n",
-		current->monitorMode.monitorDef.attributes.physicalWidth,
-		current->monitorMode.monitorDef.attributes.physicalHeight,
-		current->monitorMode.monitorDef.attributes.orientation);
+		current->config.attributes.physicalWidth,
+		current->config.attributes.physicalHeight,
+		current->config.attributes.orientation);
 	fprintf(fp,"    desktopScaleFactor:%d, deviceScaleFactor:%d\n",
-		current->monitorMode.monitorDef.attributes.desktopScaleFactor,
-		current->monitorMode.monitorDef.attributes.deviceScaleFactor);
+		current->config.attributes.desktopScaleFactor,
+		current->config.attributes.deviceScaleFactor);
 	fprintf(fp,"    scale:%d, client scale :%3.2f\n",
 		scale, client_scale);
 	fprintf(fp,"    workarea: x:%d, y:%d, width:%d, height:%d\n",
@@ -4276,7 +4276,7 @@ rdp_rail_get_primary_output(void *rdp_backend)
 	wl_list_for_each(current, &b->compositor->head_list, compositor_link) {
 		struct rdp_head *head = to_rdp_head(current);
 
-		if (head->monitorMode.monitorDef.is_primary)
+		if (head->config.is_primary)
 			return current->output;
 	}
 	return NULL;

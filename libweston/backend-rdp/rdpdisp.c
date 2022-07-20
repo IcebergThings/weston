@@ -57,7 +57,7 @@ compare_monitors_x(const void *p1, const void *p2)
 	const struct rdp_head *l = to_rdp_head((void *)whl);
 	const struct rdp_head *r = to_rdp_head((void *)whr);
 
-	return l->monitorMode.monitorDef.x > r->monitorMode.monitorDef.x;
+	return l->config.x > r->config.x;
 }
 
 static int
@@ -68,7 +68,7 @@ compare_monitors_y(const void *p1, const void *p2)
 	const struct rdp_head *l = to_rdp_head((void *)whl);
 	const struct rdp_head *r = to_rdp_head((void *)whr);
 
-	return l->monitorMode.monitorDef.y > r->monitorMode.monitorDef.y;
+	return l->config.y > r->config.y;
 }
 
 float
@@ -148,22 +148,22 @@ match_any(struct rdp_backend *rdp, rdpMonitor *a, rdpMonitor *b)
 }
 
 static void
-update_head(struct rdp_backend *rdp, struct rdp_head *head, struct rdp_monitor_mode *mm)
+update_head(struct rdp_backend *rdp, struct rdp_head *head, rdpMonitor *config)
 {
 	struct weston_mode mode = {};
 	int scale;
 	bool changed = false;
 
 	head->matched = true;
-	scale = disp_get_output_scale_from_monitor(rdp, &mm->monitorDef);
+	scale = disp_get_output_scale_from_monitor(rdp, config);
 
-	if (!match_position(rdp, &head->monitorMode.monitorDef, &mm->monitorDef))
+	if (!match_position(rdp, &head->config, config))
 		changed = true;
 
-	if (!match_dimensions(rdp, &head->monitorMode.monitorDef, &mm->monitorDef)) {
+	if (!match_dimensions(rdp, &head->config, config)) {
 		mode.flags = WL_OUTPUT_MODE_PREFERRED;
-		mode.width = mm->monitorDef.width;
-		mode.height = mm->monitorDef.height;
+		mode.width = config->width;
+		mode.height = config->height;
 		mode.refresh = rdp->rdp_monitor_refresh_rate;
 		weston_output_mode_set_native(head->base.output,
 					      &mode, scale);
@@ -173,18 +173,18 @@ update_head(struct rdp_backend *rdp, struct rdp_head *head, struct rdp_monitor_m
 	if (changed) {
 		weston_head_set_device_changed(&head->base);
 	}
-	head->monitorMode = *mm;
+	head->config = *config;
 	/* update monitor region in client */
 	pixman_region32_clear(&head->regionClient);
 	pixman_region32_init_rect(&head->regionClient,
-				  mm->monitorDef.x,
-				  mm->monitorDef.y,
-				  mm->monitorDef.width,
-				  mm->monitorDef.height);
+				  config->x,
+				  config->y,
+				  config->width,
+				  config->height);
 }
 
 static void
-match_heads(struct rdp_backend *rdp, struct rdp_monitor_mode *mm, uint32_t count,
+match_heads(struct rdp_backend *rdp, rdpMonitor *config, uint32_t count,
 	    int *done,
 	    bool (*cmp)(struct rdp_backend *rdp, rdpMonitor *a, rdpMonitor *b))
 {
@@ -201,9 +201,9 @@ match_heads(struct rdp_backend *rdp, struct rdp_monitor_mode *mm, uint32_t count
 			if (*done & (1 << i))
 				continue;
 
-			if (cmp(rdp, &current->monitorMode.monitorDef, &mm[i].monitorDef)) {
+			if (cmp(rdp, &current->config, &config[i])) {
 				*done |= 1 << i;
-				update_head(rdp, current, &mm[i]);
+				update_head(rdp, current, &config[i]);
 				break;
 			}
 		}
@@ -211,7 +211,7 @@ match_heads(struct rdp_backend *rdp, struct rdp_monitor_mode *mm, uint32_t count
 }
 
 static void
-disp_start_monitor_layout_change(freerdp_peer *client, struct rdp_monitor_mode *monitorMode, UINT32 monitorCount)
+disp_start_monitor_layout_change(freerdp_peer *client, rdpMonitor *config, UINT32 monitorCount)
 {
 	RdpPeerContext *peerCtx = (RdpPeerContext *)client->context;
 	rdpSettings *settings = client->context->settings;
@@ -238,16 +238,16 @@ disp_start_monitor_layout_change(freerdp_peer *client, struct rdp_monitor_mode *
 	/* We want the primary head to remain primary - it
 	 * should always be rdp-0.
 	  */
-	match_heads(b, monitorMode, monitorCount, &done, match_primary);
+	match_heads(b, config, monitorCount, &done, match_primary);
 
 	/* Match first head with the same dimensions */
-	match_heads(b, monitorMode, monitorCount, &done, match_dimensions);
+	match_heads(b, config, monitorCount, &done, match_dimensions);
 
 	/* Match head with the same position */
-	match_heads(b, monitorMode, monitorCount, &done, match_position);
+	match_heads(b, config, monitorCount, &done, match_position);
 
 	/* Pick any available head */
-	match_heads(b, monitorMode, monitorCount, &done, match_any);
+	match_heads(b, config, monitorCount, &done, match_any);
 
 	/* Destroy any heads we won't be using */
 	wl_list_for_each_safe(iter, tmp, &b->compositor->head_list, compositor_link) {
@@ -259,20 +259,20 @@ disp_start_monitor_layout_change(freerdp_peer *client, struct rdp_monitor_mode *
 
 	for (uint32_t i = 0; i < monitorCount; i++) {
 		/* accumulate monitor layout */
-		if (monitorMode[i].monitorDef.is_primary) {
+		if (config[i].is_primary) {
 			/* it looks settings's desktopWidth/Height only represents primary */
-			settings->DesktopWidth = monitorMode[i].monitorDef.width;
-			settings->DesktopHeight = monitorMode[i].monitorDef.height;
+			settings->DesktopWidth = config[i].width;
+			settings->DesktopHeight = config[i].height;
 		}
 		pixman_region32_union_rect(&desktop, &desktop,
-					   monitorMode[i].monitorDef.x,
-					   monitorMode[i].monitorDef.y,
-					   monitorMode[i].monitorDef.width,
-					   monitorMode[i].monitorDef.height);
+					   config[i].x,
+					   config[i].y,
+					   config[i].width,
+					   config[i].height);
 
 		/* Create new heads for any without matches */
 		if (!(done & (1 << i)))
-			rdp_head_create(b->compositor, monitorMode[i].monitorDef.is_primary, &monitorMode[i]);
+			rdp_head_create(b->compositor, config[i].is_primary, &config[i]);
 	}
 	peerCtx->desktop_left = desktop.extents.x1;
 	peerCtx->desktop_top = desktop.extents.y1;
@@ -282,7 +282,7 @@ disp_start_monitor_layout_change(freerdp_peer *client, struct rdp_monitor_mode *
 }
 
 static bool
-disp_monitor_sanity_check_layout(RdpPeerContext *peerCtx, struct rdp_monitor_mode *monitorMode, uint32_t count)
+disp_monitor_sanity_check_layout(RdpPeerContext *peerCtx, rdpMonitor *config, uint32_t count)
 {
 	struct rdp_backend *b = peerCtx->rdpBackend;
 	uint32_t primaryCount = 0;
@@ -291,36 +291,36 @@ disp_monitor_sanity_check_layout(RdpPeerContext *peerCtx, struct rdp_monitor_mod
 	/* dump client monitor topology */
 	rdp_debug(b, "%s:---INPUT---\n", __func__);
 	for (i = 0; i < count; i++) {
-		float client_scale = disp_get_client_scale_from_monitor(b, &monitorMode[i].monitorDef);
-		int scale = disp_get_output_scale_from_monitor(b, &monitorMode[i].monitorDef);
+		float client_scale = disp_get_client_scale_from_monitor(b, &config[i]);
+		int scale = disp_get_output_scale_from_monitor(b, &config[i]);
 
 		rdp_debug(b, "	rdpMonitor[%d]: x:%d, y:%d, width:%d, height:%d, is_primary:%d\n",
-			i, monitorMode[i].monitorDef.x, monitorMode[i].monitorDef.y,
-			   monitorMode[i].monitorDef.width, monitorMode[i].monitorDef.height,
-			   monitorMode[i].monitorDef.is_primary);
+			i, config[i].x, config[i].y,
+			   config[i].width, config[i].height,
+			   config[i].is_primary);
 		rdp_debug(b, "	rdpMonitor[%d]: physicalWidth:%d, physicalHeight:%d, orientation:%d\n",
-			i, monitorMode[i].monitorDef.attributes.physicalWidth,
-			   monitorMode[i].monitorDef.attributes.physicalHeight,
-			   monitorMode[i].monitorDef.attributes.orientation);
+			i, config[i].attributes.physicalWidth,
+			   config[i].attributes.physicalHeight,
+			   config[i].attributes.orientation);
 		rdp_debug(b, "	rdpMonitor[%d]: desktopScaleFactor:%d, deviceScaleFactor:%d\n",
-			i, monitorMode[i].monitorDef.attributes.desktopScaleFactor,
-			   monitorMode[i].monitorDef.attributes.deviceScaleFactor);
+			i, config[i].attributes.desktopScaleFactor,
+			   config[i].attributes.deviceScaleFactor);
 		rdp_debug(b, "	rdpMonitor[%d]: scale:%d, client scale :%3.2f\n",
 			i, scale, client_scale);
 	}
 
 	for (i = 0; i < count; i++) {
 		/* make sure there is only one primary and its position at client */
-		if (monitorMode[i].monitorDef.is_primary) {
+		if (config[i].is_primary) {
 			/* count number of primary */
 			if (++primaryCount > 1) {
 				rdp_debug_error(b, "%s: RDP client reported unexpected primary count (%d)\n",__func__, primaryCount);
 				return false;
 			}
 			/* primary must be at (0,0) in client space */
-			if (monitorMode[i].monitorDef.x != 0 || monitorMode[i].monitorDef.y != 0) {
+			if (config[i].x != 0 || config[i].y != 0) {
 				rdp_debug_error(b, "%s: RDP client reported primary is not at (0,0) but (%d,%d).\n",
-					__func__, monitorMode[i].monitorDef.x, monitorMode[i].monitorDef.y);
+					__func__, config[i].x, config[i].y);
 				return false;
 			}
 		}
@@ -365,17 +365,17 @@ disp_monitor_validate_and_compute_layout(struct weston_compositor *ec)
 
 	wl_list_for_each(iter, &ec->head_list, compositor_link) {
 		struct rdp_head *head = to_rdp_head(iter);
-		float client_scale = disp_get_client_scale_from_monitor(b, &head->monitorMode.monitorDef);
+		float client_scale = disp_get_client_scale_from_monitor(b, &head->config);
 
 		/* check if any monitor has scaling enabled */
 		if (client_scale != 1.0f)
 			isScalingUsed = true;
 
 		/* find upper-left corner of combined monitors in client space */
-		if (upperLeftX > head->monitorMode.monitorDef.x)
-			upperLeftX = head->monitorMode.monitorDef.x;
-		if (upperLeftY > head->monitorMode.monitorDef.y)
-			upperLeftY = head->monitorMode.monitorDef.y;
+		if (upperLeftX > head->config.x)
+			upperLeftX = head->config.x;
+		if (upperLeftY > head->config.y)
+			upperLeftY = head->config.y;
 	}
 	assert(upperLeftX <= 0);
 	assert(upperLeftY <= 0);
@@ -391,10 +391,10 @@ disp_monitor_validate_and_compute_layout(struct weston_compositor *ec)
 		sort_head_list(ec, compare_monitors_x);
 		head = get_first_head(ec);
 		last = head;
-		assert(upperLeftX == head->monitorMode.monitorDef.x);
+		assert(upperLeftX == head->config.x);
 
 		/* check if monitors are horizontally connected each other */
-		offsetFromOriginClient = head->monitorMode.monitorDef.x + head->monitorMode.monitorDef.width;
+		offsetFromOriginClient = head->config.x + head->config.width;
 		i = 0;
 		wl_list_for_each(iter, &ec->head_list, compositor_link) {
 			struct rdp_head *cur = to_rdp_head(iter);
@@ -403,16 +403,16 @@ disp_monitor_validate_and_compute_layout(struct weston_compositor *ec)
 			if (i == 1)
 				continue;
 
-			if (offsetFromOriginClient != cur->monitorMode.monitorDef.x) {
+			if (offsetFromOriginClient != cur->config.x) {
 				weston_log("\tRDP client reported monitors not horizontally connected each other at %d (x check)\n", i);
 				break;
 			}
-			offsetFromOriginClient += cur->monitorMode.monitorDef.width;
+			offsetFromOriginClient += cur->config.width;
 
-			if (!is_line_intersected(last->monitorMode.monitorDef.y,
-						 last->monitorMode.monitorDef.y + last->monitorMode.monitorDef.height,
-						 cur->monitorMode.monitorDef.y,
-						 cur->monitorMode.monitorDef.y + cur->monitorMode.monitorDef.height)) {
+			if (!is_line_intersected(last->config.y,
+						 last->config.y + last->config.height,
+						 cur->config.y,
+						 cur->config.y + cur->config.height)) {
 				weston_log("\tRDP client reported monitors not horizontally connected each other at %d (y check)\n\n", i);
 				break;
 			}
@@ -427,10 +427,10 @@ disp_monitor_validate_and_compute_layout(struct weston_compositor *ec)
 			sort_head_list(ec, compare_monitors_y);
 			head = get_first_head(ec);
 			last = head;
-			assert(upperLeftY == head->monitorMode.monitorDef.y);
+			assert(upperLeftY == head->config.y);
 
 			/* make sure monitors are horizontally connected each other */
-			offsetFromOriginClient = head->monitorMode.monitorDef.y + head->monitorMode.monitorDef.height;
+			offsetFromOriginClient = head->config.y + head->config.height;
 			i = 0;
 			wl_list_for_each(iter, &ec->head_list, compositor_link) {
 				struct rdp_head *cur = to_rdp_head(iter);
@@ -439,16 +439,16 @@ disp_monitor_validate_and_compute_layout(struct weston_compositor *ec)
 				if (i == 1)
 					continue;
 
-				if (offsetFromOriginClient != cur->monitorMode.monitorDef.y) {
+				if (offsetFromOriginClient != cur->config.y) {
 					weston_log("\tRDP client reported monitors not vertically connected each other at %d (y check)\n", i);
 					break;
 				}
-				offsetFromOriginClient += cur->monitorMode.monitorDef.height;
+				offsetFromOriginClient += cur->config.height;
 
-				if (!is_line_intersected(last->monitorMode.monitorDef.x,
-							 last->monitorMode.monitorDef.x + last->monitorMode.monitorDef.width,
-							 cur->monitorMode.monitorDef.x,
-							 cur->monitorMode.monitorDef.x + cur->monitorMode.monitorDef.width)) {
+				if (!is_line_intersected(last->config.x,
+							 last->config.x + last->config.width,
+							 cur->config.x,
+							 cur->config.x + cur->config.width)) {
 					weston_log("\tRDP client reported monitors not horizontally connected each other at %d (x check)\n\n", i);
 					break;
 				}
@@ -476,18 +476,18 @@ disp_monitor_validate_and_compute_layout(struct weston_compositor *ec)
 
 		wl_list_for_each(iter, &ec->head_list, compositor_link) {
 			struct rdp_head *head = to_rdp_head(iter);
-			int scale = disp_get_output_scale_from_monitor(b, &head->monitorMode.monitorDef);
+			int scale = disp_get_output_scale_from_monitor(b, &head->config);
 
-			rectWeston[i].width = head->monitorMode.monitorDef.width / scale;
-			rectWeston[i].height = head->monitorMode.monitorDef.height / scale;
+			rectWeston[i].width = head->config.width / scale;
+			rectWeston[i].height = head->config.height / scale;
 			if (isConnected_H) {
 				assert(isConnected_V == false);
 				rectWeston[i].x = offsetFromOriginWeston;
-				rectWeston[i].y = abs((upperLeftY - head->monitorMode.monitorDef.y) / scale);
+				rectWeston[i].y = abs((upperLeftY - head->config.y) / scale);
 				offsetFromOriginWeston += rectWeston[i].width;
 			} else {
 				assert(isConnected_V == true);
-				rectWeston[i].x = abs((upperLeftX - head->monitorMode.monitorDef.x) / scale);
+				rectWeston[i].x = abs((upperLeftX - head->config.x) / scale);
 				rectWeston[i].y = offsetFromOriginWeston;
 				offsetFromOriginWeston += rectWeston[i].height;
 			}
@@ -502,11 +502,11 @@ disp_monitor_validate_and_compute_layout(struct weston_compositor *ec)
 		wl_list_for_each(iter, &ec->head_list, compositor_link) {
 			struct rdp_head *head = to_rdp_head(iter);
 
-			rectWeston[i].width = head->monitorMode.monitorDef.width;
-			rectWeston[i].height = head->monitorMode.monitorDef.height;
-			rectWeston[i].x = head->monitorMode.monitorDef.x + abs(upperLeftX);
-			rectWeston[i].y = head->monitorMode.monitorDef.y + abs(upperLeftY);
-			head->monitorMode.monitorDef.attributes.desktopScaleFactor = 0.0;
+			rectWeston[i].width = head->config.width;
+			rectWeston[i].height = head->config.height;
+			rectWeston[i].x = head->config.x + abs(upperLeftX);
+			rectWeston[i].y = head->config.y + abs(upperLeftY);
+			head->config.attributes.desktopScaleFactor = 0.0;
 			assert(rectWeston[i].x >= 0);
 			assert(rectWeston[i].y >= 0);
 			i++;
@@ -518,23 +518,23 @@ disp_monitor_validate_and_compute_layout(struct weston_compositor *ec)
 	wl_list_for_each(iter, &ec->head_list, compositor_link) {
 		struct rdp_head *head = to_rdp_head(iter);
 		struct rdp_backend *b = to_rdp_backend(ec);
-		float client_scale = disp_get_client_scale_from_monitor(b, &head->monitorMode.monitorDef);
-		int scale = disp_get_output_scale_from_monitor(b, &head->monitorMode.monitorDef);
+		float client_scale = disp_get_client_scale_from_monitor(b, &head->config);
+		int scale = disp_get_output_scale_from_monitor(b, &head->config);
 
 		weston_log("	rdpMonitor[%d]: x:%d, y:%d, width:%d, height:%d, is_primary:%d\n",
-			i, head->monitorMode.monitorDef.x, head->monitorMode.monitorDef.y,
-			   head->monitorMode.monitorDef.width, head->monitorMode.monitorDef.height,
-			   head->monitorMode.monitorDef.is_primary);
+			i, head->config.x, head->config.y,
+			   head->config.width, head->config.height,
+			   head->config.is_primary);
 		weston_log("	rdpMonitor[%d]: weston x:%d, y:%d, width:%d, height:%d\n",
 			i, rectWeston[i].x, rectWeston[i].y,
 			   rectWeston[i].width, rectWeston[i].height);
 		weston_log("	rdpMonitor[%d]: physicalWidth:%d, physicalHeight:%d, orientation:%d\n",
-			i, head->monitorMode.monitorDef.attributes.physicalWidth,
-			   head->monitorMode.monitorDef.attributes.physicalHeight,
-			   head->monitorMode.monitorDef.attributes.orientation);
+			i, head->config.attributes.physicalWidth,
+			   head->config.attributes.physicalHeight,
+			   head->config.attributes.orientation);
 		weston_log("	rdpMonitor[%d]: desktopScaleFactor:%d, deviceScaleFactor:%d\n",
-			i, head->monitorMode.monitorDef.attributes.desktopScaleFactor,
-			   head->monitorMode.monitorDef.attributes.deviceScaleFactor);
+			i, head->config.attributes.desktopScaleFactor,
+			   head->config.attributes.deviceScaleFactor);
 		weston_log("	rdpMonitor[%d]: scale:%d, clientScale:%3.2f\n",
 			i, scale, client_scale);
 		i++;
@@ -549,14 +549,14 @@ disp_monitor_validate_and_compute_layout(struct weston_compositor *ec)
 			/* ask weston to adjust size */
 			struct weston_mode new_mode = {};
 			struct rdp_backend *b = to_rdp_backend(ec);
-			float client_scale = disp_get_client_scale_from_monitor(b, &current->monitorMode.monitorDef);
-			int scale = disp_get_output_scale_from_monitor(b, &current->monitorMode.monitorDef);
+			float client_scale = disp_get_client_scale_from_monitor(b, &current->config);
+			int scale = disp_get_output_scale_from_monitor(b, &current->config);
 
-			new_mode.width = current->monitorMode.monitorDef.width;
-			new_mode.height = current->monitorMode.monitorDef.height;
+			new_mode.width = current->config.width;
+			new_mode.height = current->config.height;
 			weston_log("Head mode change:%s NEW width:%d, height:%d, scale:%d, clientScale:%f\n",
-				  output->name, current->monitorMode.monitorDef.width,
-				  current->monitorMode.monitorDef.height,
+				  output->name, current->config.width,
+				  current->config.height,
 				  scale,
 				  client_scale);
 			if (output->scale != scale) {
@@ -567,8 +567,8 @@ disp_monitor_validate_and_compute_layout(struct weston_compositor *ec)
 			}
 			weston_output_mode_set_native(iter->output, &new_mode, scale);
 			weston_head_set_physical_size(iter,
-						      current->monitorMode.monitorDef.attributes.physicalWidth,
-						      current->monitorMode.monitorDef.attributes.physicalHeight);
+						      current->config.attributes.physicalWidth,
+						      current->config.attributes.physicalHeight);
 			/* Notify clients for updated resolution/scale. */
 			weston_output_set_transform(output, WL_OUTPUT_TRANSFORM_NORMAL);
 			/* output size must match with monitor's rect in weston space */
@@ -612,13 +612,13 @@ disp_monitor_validate_and_compute_layout(struct weston_compositor *ec)
 	wl_list_for_each(iter, &ec->head_list, compositor_link) {
 		struct rdp_head *current = to_rdp_head(iter);
 
-		if (current->monitorMode.monitorDef.is_primary) {
+		if (current->config.is_primary) {
 			weston_log("client origin (0,0) is (%d,%d) in Weston space\n",
 				rectWeston[i].x,
 				rectWeston[i].y);
 			/* primary must be at (0,0) in client space */
-			assert(current->monitorMode.monitorDef.x == 0);
-			assert(current->monitorMode.monitorDef.y == 0);
+			assert(current->config.x == 0);
+			assert(current->config.y == 0);
 			/* there must be only one primary */
 			assert(is_primary_found == FALSE);
 			is_primary_found = TRUE;
@@ -632,30 +632,15 @@ handle_adjust_monitor_layout(freerdp_peer *client, int monitor_count, rdpMonitor
 {
 	RdpPeerContext *peerCtx = (RdpPeerContext *)client->context;
 	struct rdp_backend *b = peerCtx->rdpBackend;
-	bool success = true;
-	struct rdp_monitor_mode *monitorMode = NULL;
-	int i;
 
-	monitorMode = xmalloc(sizeof(struct rdp_monitor_mode) * monitor_count);
+	if (!disp_monitor_sanity_check_layout(peerCtx, monitors, monitor_count))
+		return true;
 
-	for (i = 0; i < monitor_count; i++) {
-		monitorMode[i].monitorDef = monitors[i];
-		monitorMode[i].monitorDef.orig_screen = 0;
-	}
-
-	if (!disp_monitor_sanity_check_layout(peerCtx, monitorMode, monitor_count)) {
-		success = true;
-		goto exit;
-	}
-
-	disp_start_monitor_layout_change(client, monitorMode, monitor_count);
+	disp_start_monitor_layout_change(client, monitors, monitor_count);
 
 	disp_monitor_validate_and_compute_layout(b->compositor);
 
-exit:
-	free(monitorMode);
-
-	return success;
+	return true;
 }
 
 static inline void
@@ -681,12 +666,12 @@ to_weston_coordinate(RdpPeerContext *peerContext, int32_t *x, int32_t *y, uint32
 
 		if (pixman_region32_contains_point(&head->regionClient, sx, sy, NULL)) {
 			struct weston_output *output = head->base.output;
-			float client_scale = disp_get_client_scale_from_monitor(b, &head->monitorMode.monitorDef);
+			float client_scale = disp_get_client_scale_from_monitor(b, &head->config);
 			float scale = 1.0f / client_scale;
 
 			/* translate x/y to offset from this output on client space. */
-			sx -= head->monitorMode.monitorDef.x;
-			sy -= head->monitorMode.monitorDef.y;
+			sx -= head->config.x;
+			sy -= head->config.y;
 			/* scale x/y to client output space. */
 			to_weston_scale_only(peerContext, output, scale, &sx, &sy);
 			if (width && height)
@@ -725,7 +710,7 @@ to_client_coordinate(RdpPeerContext *peerContext, struct weston_output *output, 
 	/* Pick first head from output. */
 	wl_list_for_each(head_iter, &output->head_list, output_link) {
 		struct rdp_head *head = to_rdp_head(head_iter);
-		float scale = disp_get_client_scale_from_monitor(b, &head->monitorMode.monitorDef);
+		float scale = disp_get_client_scale_from_monitor(b, &head->config);
 
 		/* translate x/y to offset from this output on weston space. */
 		sx -= output->x;
@@ -735,8 +720,8 @@ to_client_coordinate(RdpPeerContext *peerContext, struct weston_output *output, 
 		if (width && height)
 			to_client_scale_only(peerContext, output, scale, width, height);
 		/* translate x/y to offset from this output on client space. */
-		sx += head->monitorMode.monitorDef.x;
-		sy += head->monitorMode.monitorDef.y;
+		sx += head->config.x;
+		sy += head->config.y;
 		rdp_debug_verbose(b, "%s: (x:%d, y:%d) -> (sx:%d, sy:%d) at head:%s\n",
 				  __func__, *x, *y, sx, sy, head_iter->name);
 		*x = sx;
