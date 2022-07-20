@@ -52,17 +52,23 @@ is_line_intersected(int l1, int l2, int r1, int r2)
 static int
 compare_monitors_x(const void *p1, const void *p2)
 {
-	const struct rdp_monitor_mode *l = p1;
-	const struct rdp_monitor_mode *r = p2;
-	return l->monitorDef.x > r->monitorDef.x;
+	const struct weston_head *whl = *(const struct weston_head **)p1;
+	const struct weston_head *whr = *(const struct weston_head **)p2;
+	const struct rdp_head *l = to_rdp_head((void *)whl);
+	const struct rdp_head *r = to_rdp_head((void *)whr);
+
+	return l->monitorMode.monitorDef.x > r->monitorMode.monitorDef.x;
 }
 
 static int
 compare_monitors_y(const void *p1, const void *p2)
 {
-	const struct rdp_monitor_mode *l = p1;
-	const struct rdp_monitor_mode *r = p2;
-	return l->monitorDef.y > r->monitorDef.y;
+	const struct weston_head *whl = *(const struct weston_head **)p1;
+	const struct weston_head *whr = *(const struct weston_head **)p2;
+	const struct rdp_head *l = to_rdp_head((void *)whl);
+	const struct rdp_head *r = to_rdp_head((void *)whr);
+
+	return l->monitorMode.monitorDef.y > r->monitorMode.monitorDef.y;
 }
 
 static float
@@ -89,6 +95,17 @@ static int
 disp_get_output_scale_from_monitor(struct rdp_backend *b, rdpMonitor *config)
 {
 	return (int) disp_get_client_scale_from_monitor(b, config);
+}
+
+static struct rdp_head *
+get_first_head(struct weston_compositor *ec)
+{
+	struct weston_head *head;
+
+	wl_list_for_each(head, &ec->head_list, compositor_link)
+		return to_rdp_head(head);
+
+	return NULL;
 }
 
 static bool
@@ -392,84 +409,131 @@ disp_monitor_sanity_check_layout(RdpPeerContext *peerCtx, struct rdp_monitor_mod
 }
 
 static void
-disp_monitor_validate_and_compute_layout(RdpPeerContext *peerCtx, struct rdp_monitor_mode *monitorMode, uint32_t monitorCount)
+sort_head_list(struct weston_compositor *ec, int (*compar)(const void *, const void *))
 {
-	struct rdp_backend *b = peerCtx->rdpBackend;
+	int count = wl_list_length(&ec->head_list);
+	struct weston_head *head_array[count];
+	struct weston_head *iter, *tmp;
+	int i = 0;
+
+	wl_list_for_each_safe(iter, tmp, &ec->head_list, compositor_link) {
+		head_array[i++] = iter;
+		wl_list_remove(&iter->compositor_link);
+	}
+
+	qsort(head_array, count, sizeof(struct weston_head *), compar);
+
+	wl_list_init(&ec->head_list);
+	for (i = 0; i < count; i++)
+		wl_list_insert(ec->head_list.prev, &head_array[i]->compositor_link);
+}
+
+static void
+disp_monitor_validate_and_compute_layout(struct weston_compositor *ec)
+{
+	struct weston_head *iter;
 	bool isConnected_H = false;
 	bool isConnected_V = false;
 	bool isScalingUsed = false;
 	bool isScalingSupported = true;
 	int upperLeftX = 0;
 	int upperLeftY = 0;
-	uint32_t i;
+	int i;
+	int count;
 
-	for (i = 0; i < monitorCount; i++) {
+	wl_list_for_each(iter, &ec->head_list, compositor_link) {
+		struct rdp_head *head = to_rdp_head(iter);
+
 		/* check if any monitor has scaling enabled */
-		if (monitorMode[i].clientScale != 1.0f)
+		if (head->monitorMode.clientScale != 1.0f)
 			isScalingUsed = true;
 
 		/* find upper-left corner of combined monitors in client space */
-		if (upperLeftX > monitorMode[i].monitorDef.x)
-			upperLeftX = monitorMode[i].monitorDef.x;
-		if (upperLeftY > monitorMode[i].monitorDef.y)
-			upperLeftY = monitorMode[i].monitorDef.y;
+		if (upperLeftX > head->monitorMode.monitorDef.x)
+			upperLeftX = head->monitorMode.monitorDef.x;
+		if (upperLeftY > head->monitorMode.monitorDef.y)
+			upperLeftY = head->monitorMode.monitorDef.y;
 	}
 	assert(upperLeftX <= 0);
 	assert(upperLeftY <= 0);
-	rdp_debug(b, "Client desktop upper left coordinate (%d,%d)\n", upperLeftX, upperLeftY);
+	weston_log("Client desktop upper left coordinate (%d,%d)\n", upperLeftX, upperLeftY);
 
-	if (monitorCount > 1) {
+	count = wl_list_length(&ec->head_list);
+
+	if (count > 1) {
+		struct rdp_head *head, *last;
 		int32_t offsetFromOriginClient;
 
 		/* first, sort monitors horizontally */
-		qsort(monitorMode, monitorCount, sizeof(*monitorMode), compare_monitors_x);
-		assert(upperLeftX == monitorMode[0].monitorDef.x);
+		sort_head_list(ec, compare_monitors_x);
+		head = get_first_head(ec);
+		last = head;
+		assert(upperLeftX == head->monitorMode.monitorDef.x);
 
 		/* check if monitors are horizontally connected each other */
-		offsetFromOriginClient = monitorMode[0].monitorDef.x + monitorMode[0].monitorDef.width;
-		for (i = 1; i < monitorCount; i++) {
-			if (offsetFromOriginClient != monitorMode[i].monitorDef.x) {
-				rdp_debug(b, "\tRDP client reported monitors not horizontally connected each other at %d (x check)\n", i);
-				break;
-			}
-			offsetFromOriginClient += monitorMode[i].monitorDef.width;
+		offsetFromOriginClient = head->monitorMode.monitorDef.x + head->monitorMode.monitorDef.width;
+		i = 0;
+		wl_list_for_each(iter, &ec->head_list, compositor_link) {
+			struct rdp_head *cur = to_rdp_head(iter);
 
-			if (!is_line_intersected(monitorMode[i-1].monitorDef.y,
-						 monitorMode[i-1].monitorDef.y + monitorMode[i-1].monitorDef.height,
-						 monitorMode[i].monitorDef.y,
-						 monitorMode[i].monitorDef.y + monitorMode[i].monitorDef.height)) {
-				rdp_debug(b, "\tRDP client reported monitors not horizontally connected each other at %d (y check)\n\n", i);
+			i++;
+			if (i == 1)
+				continue;
+
+			if (offsetFromOriginClient != cur->monitorMode.monitorDef.x) {
+				weston_log("\tRDP client reported monitors not horizontally connected each other at %d (x check)\n", i);
 				break;
 			}
+			offsetFromOriginClient += cur->monitorMode.monitorDef.width;
+
+			if (!is_line_intersected(last->monitorMode.monitorDef.y,
+						 last->monitorMode.monitorDef.y + last->monitorMode.monitorDef.height,
+						 cur->monitorMode.monitorDef.y,
+						 cur->monitorMode.monitorDef.y + cur->monitorMode.monitorDef.height)) {
+				weston_log("\tRDP client reported monitors not horizontally connected each other at %d (y check)\n\n", i);
+				break;
+			}
+			last = cur;
 		}
-		if (i == monitorCount) {
-			rdp_debug(b, "\tAll monitors are horizontally placed\n");
+		if (i == count) {
+			weston_log("\tAll monitors are horizontally placed\n");
 			isConnected_H = true;
 		} else {
+			struct rdp_head *head, *last;
 			/* next, trying sort monitors vertically */
-			qsort(monitorMode, monitorCount, sizeof(*monitorMode), compare_monitors_y);
-			assert(upperLeftY == monitorMode[0].monitorDef.y);
+			sort_head_list(ec, compare_monitors_y);
+			head = get_first_head(ec);
+			last = head;
+			assert(upperLeftY == head->monitorMode.monitorDef.y);
 
 			/* make sure monitors are horizontally connected each other */
-			offsetFromOriginClient = monitorMode[0].monitorDef.y + monitorMode[0].monitorDef.height;
-			for (i = 1; i < monitorCount; i++) {
-				if (offsetFromOriginClient != monitorMode[i].monitorDef.y) {
-					rdp_debug(b, "\tRDP client reported monitors not vertically connected each other at %d (y check)\n", i);
-					break;
-				}
-				offsetFromOriginClient += monitorMode[i].monitorDef.height;
+			offsetFromOriginClient = head->monitorMode.monitorDef.y + head->monitorMode.monitorDef.height;
+			i = 0;
+			wl_list_for_each(iter, &ec->head_list, compositor_link) {
+				struct rdp_head *cur = to_rdp_head(iter);
 
-				if (!is_line_intersected(monitorMode[i-1].monitorDef.x,
-							 monitorMode[i-1].monitorDef.x + monitorMode[i-1].monitorDef.width,
-							 monitorMode[i].monitorDef.x,
-							 monitorMode[i].monitorDef.x + monitorMode[i].monitorDef.width)) {
-					rdp_debug(b, "\tRDP client reported monitors not horizontally connected each other at %d (x check)\n\n", i);
+				i++;
+				if (i == 1)
+					continue;
+
+				if (offsetFromOriginClient != cur->monitorMode.monitorDef.y) {
+					weston_log("\tRDP client reported monitors not vertically connected each other at %d (y check)\n", i);
 					break;
 				}
+				offsetFromOriginClient += cur->monitorMode.monitorDef.height;
+
+				if (!is_line_intersected(last->monitorMode.monitorDef.x,
+							 last->monitorMode.monitorDef.x + last->monitorMode.monitorDef.width,
+							 cur->monitorMode.monitorDef.x,
+							 cur->monitorMode.monitorDef.x + cur->monitorMode.monitorDef.width)) {
+					weston_log("\tRDP client reported monitors not horizontally connected each other at %d (x check)\n\n", i);
+					break;
+				}
+				last = cur;
 			}
 
-			if (i == monitorCount) {
-				rdp_debug(b, "\tAll monitors are vertically placed\n");
+			if (i == count) {
+				weston_log("\tAll monitors are vertically placed\n");
 				isConnected_V = true;
 			}
 		}
@@ -479,61 +543,69 @@ disp_monitor_validate_and_compute_layout(RdpPeerContext *peerCtx, struct rdp_mon
 
 	if (isScalingUsed && (!isConnected_H && !isConnected_V)) {
 		/* scaling can't be supported in complex monitor placement */
-		rdp_debug_error(b, "\nWARNING\nWARNING\nWARNING: Scaling is used, but can't be supported in complex monitor placement\nWARNING\nWARNING\n");
+		weston_log("\nWARNING\nWARNING\nWARNING: Scaling is used, but can't be supported in complex monitor placement\nWARNING\nWARNING\n");
 		isScalingSupported = false;
 	}
 
 	if (isScalingUsed && isScalingSupported) {
 		uint32_t offsetFromOriginWeston = 0;
-		for (i = 0; i < monitorCount; i++) {
-			monitorMode[i].rectWeston.width = monitorMode[i].monitorDef.width / monitorMode[i].scale;
-			monitorMode[i].rectWeston.height = monitorMode[i].monitorDef.height / monitorMode[i].scale;
+
+		wl_list_for_each(iter, &ec->head_list, compositor_link) {
+			struct rdp_head *head = to_rdp_head(iter);
+
+			head->monitorMode.rectWeston.width = head->monitorMode.monitorDef.width / head->monitorMode.scale;
+			head->monitorMode.rectWeston.height = head->monitorMode.monitorDef.height / head->monitorMode.scale;
 			if (isConnected_H) {
 				assert(isConnected_V == false);
-				monitorMode[i].rectWeston.x = offsetFromOriginWeston;
-				monitorMode[i].rectWeston.y = abs((upperLeftY - monitorMode[i].monitorDef.y) / monitorMode[i].scale);
-				offsetFromOriginWeston += monitorMode[i].rectWeston.width;
+				head->monitorMode.rectWeston.x = offsetFromOriginWeston;
+				head->monitorMode.rectWeston.y = abs((upperLeftY - head->monitorMode.monitorDef.y) / head->monitorMode.scale);
+				offsetFromOriginWeston += head->monitorMode.rectWeston.width;
 			} else {
 				assert(isConnected_V == true);
-				monitorMode[i].rectWeston.x = abs((upperLeftX - monitorMode[i].monitorDef.x) / monitorMode[i].scale);
-				monitorMode[i].rectWeston.y = offsetFromOriginWeston;
-				offsetFromOriginWeston += monitorMode[i].rectWeston.height;
+				head->monitorMode.rectWeston.x = abs((upperLeftX - head->monitorMode.monitorDef.x) / head->monitorMode.scale);
+				head->monitorMode.rectWeston.y = offsetFromOriginWeston;
+				offsetFromOriginWeston += head->monitorMode.rectWeston.height;
 			}
-			assert(monitorMode[i].rectWeston.x >= 0);
-			assert(monitorMode[i].rectWeston.y >= 0);
+			assert(head->monitorMode.rectWeston.x >= 0);
+			assert(head->monitorMode.rectWeston.y >= 0);
 		}
 	} else {
 		/* no scaling is used or monitor placement is too complex to scale in weston space, fallback to 1.0f */
-		for (i = 0; i < monitorCount; i++) {
-			monitorMode[i].rectWeston.width = monitorMode[i].monitorDef.width;
-			monitorMode[i].rectWeston.height = monitorMode[i].monitorDef.height;
-			monitorMode[i].rectWeston.x = monitorMode[i].monitorDef.x + abs(upperLeftX);
-			monitorMode[i].rectWeston.y = monitorMode[i].monitorDef.y + abs(upperLeftY);
-			assert(monitorMode[i].rectWeston.x >= 0);
-			assert(monitorMode[i].rectWeston.y >= 0);
-			monitorMode[i].scale = 1;
-			monitorMode[i].clientScale = 1.0f;
+		wl_list_for_each(iter, &ec->head_list, compositor_link) {
+			struct rdp_head *head = to_rdp_head(iter);
+			head->monitorMode.rectWeston.width = head->monitorMode.monitorDef.width;
+			head->monitorMode.rectWeston.height = head->monitorMode.monitorDef.height;
+			head->monitorMode.rectWeston.x = head->monitorMode.monitorDef.x + abs(upperLeftX);
+			head->monitorMode.rectWeston.y = head->monitorMode.monitorDef.y + abs(upperLeftY);
+			assert(head->monitorMode.rectWeston.x >= 0);
+			assert(head->monitorMode.rectWeston.y >= 0);
+			head->monitorMode.scale = 1;
+			head->monitorMode.clientScale = 1.0f;
 		}
 	}
 
-	rdp_debug(b, "%s:---OUTPUT---\n", __func__);
-	for (UINT32 i = 0; i < monitorCount; i++) {
-		rdp_debug(b, "	rdpMonitor[%d]: x:%d, y:%d, width:%d, height:%d, is_primary:%d\n",
-			i, monitorMode[i].monitorDef.x, monitorMode[i].monitorDef.y,
-			   monitorMode[i].monitorDef.width, monitorMode[i].monitorDef.height,
-			   monitorMode[i].monitorDef.is_primary);
-		rdp_debug(b, "	rdpMonitor[%d]: weston x:%d, y:%d, width:%d, height:%d\n",
-			i, monitorMode[i].rectWeston.x, monitorMode[i].rectWeston.y,
-			   monitorMode[i].rectWeston.width, monitorMode[i].rectWeston.height);
-		rdp_debug(b, "	rdpMonitor[%d]: physicalWidth:%d, physicalHeight:%d, orientation:%d\n",
-			i, monitorMode[i].monitorDef.attributes.physicalWidth,
-			   monitorMode[i].monitorDef.attributes.physicalHeight,
-			   monitorMode[i].monitorDef.attributes.orientation);
-		rdp_debug(b, "	rdpMonitor[%d]: desktopScaleFactor:%d, deviceScaleFactor:%d\n",
-			i, monitorMode[i].monitorDef.attributes.desktopScaleFactor,
-			   monitorMode[i].monitorDef.attributes.deviceScaleFactor);
-		rdp_debug(b, "	rdpMonitor[%d]: scale:%d, clientScale:%3.2f\n",
-			i, monitorMode[i].scale, monitorMode[i].clientScale);
+	weston_log("%s:---OUTPUT---\n", __func__);
+	i = 0;
+	wl_list_for_each(iter, &ec->head_list, compositor_link) {
+		struct rdp_head *head = to_rdp_head(iter);
+
+		weston_log("	rdpMonitor[%d]: x:%d, y:%d, width:%d, height:%d, is_primary:%d\n",
+			i, head->monitorMode.monitorDef.x, head->monitorMode.monitorDef.y,
+			   head->monitorMode.monitorDef.width, head->monitorMode.monitorDef.height,
+			   head->monitorMode.monitorDef.is_primary);
+		weston_log("	rdpMonitor[%d]: weston x:%d, y:%d, width:%d, height:%d\n",
+			i, head->monitorMode.rectWeston.x, head->monitorMode.rectWeston.y,
+			   head->monitorMode.rectWeston.width, head->monitorMode.rectWeston.height);
+		weston_log("	rdpMonitor[%d]: physicalWidth:%d, physicalHeight:%d, orientation:%d\n",
+			i, head->monitorMode.monitorDef.attributes.physicalWidth,
+			   head->monitorMode.monitorDef.attributes.physicalHeight,
+			   head->monitorMode.monitorDef.attributes.orientation);
+		weston_log("	rdpMonitor[%d]: desktopScaleFactor:%d, deviceScaleFactor:%d\n",
+			i, head->monitorMode.monitorDef.attributes.desktopScaleFactor,
+			   head->monitorMode.monitorDef.attributes.deviceScaleFactor);
+		weston_log("	rdpMonitor[%d]: scale:%d, clientScale:%3.2f\n",
+			i, head->monitorMode.scale, head->monitorMode.clientScale);
+		i++;
 	}
 }
 
@@ -560,9 +632,9 @@ handle_adjust_monitor_layout(freerdp_peer *client, int monitor_count, rdpMonitor
 		goto exit;
 	}
 
-	disp_monitor_validate_and_compute_layout(peerCtx, monitorMode, monitor_count);
-
 	disp_start_monitor_layout_change(client, monitorMode, monitor_count);
+
+	disp_monitor_validate_and_compute_layout(b->compositor);
 	disp_end_monitor_layout_change(b->compositor);
 
 exit:
