@@ -594,15 +594,11 @@ rdp_head_create(struct weston_compositor *compositor, BOOL isPrimary, rdpMonitor
 	head = xzalloc(sizeof *head);
 
 	head->index = b->head_index++;
-	if (config) {
+	if (config)
 		head->config = *config;
-		pixman_region32_init_rect(&head->regionClient,
-			config->x, config->y,
-			config->width, config->height);
-	} else {
+	else
 		head->config.attributes.desktopScaleFactor = 0.0;
-		pixman_region32_init(&head->regionClient);
-	}
+
 	if (isPrimary)
 		rdp_debug(b, "Default head is being added\n");
 
@@ -626,7 +622,6 @@ void
 rdp_head_destroy(struct weston_compositor *compositor, struct rdp_head *head)
 {
 	weston_head_release(&head->base);
-	pixman_region32_fini(&head->regionClient);
 	free(head);
 }
 

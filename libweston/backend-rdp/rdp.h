@@ -181,7 +181,6 @@ struct rdp_head {
 	bool matched;
 	rdpMonitor config;
 	/*TODO: these region/rectangles can be moved to rdp_output */
-	pixman_region32_t regionClient; // in client coordnate.
 	pixman_rectangle32_t workareaClient; // in client coordinate.
 	pixman_rectangle32_t workarea; // in weston coordinate.
 };

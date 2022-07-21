@@ -133,13 +133,6 @@ update_head(struct rdp_backend *rdp, struct rdp_head *head, rdpMonitor *config)
 		weston_head_set_device_changed(&head->base);
 	}
 	head->config = *config;
-	/* update monitor region in client */
-	pixman_region32_clear(&head->regionClient);
-	pixman_region32_init_rect(&head->regionClient,
-				  config->x,
-				  config->y,
-				  config->width,
-				  config->height);
 }
 
 static void
@@ -309,6 +302,21 @@ to_weston_scale_only(RdpPeerContext *peer, struct weston_output *output, float s
 	*y = (float)(*y) * scale;
 }
 
+static bool
+rdp_monitor_contains(rdpMonitor *monitor, int32_t x, int32_t y)
+{
+	if (x < monitor->x)
+		return FALSE;
+	if (y < monitor->y)
+		return FALSE;
+	if (x >= monitor->x + monitor->width)
+		return FALSE;
+	if (y >= monitor->y + monitor->height)
+		return FALSE;
+
+	return TRUE;
+}
+
 /* Input x/y in client space, output x/y in weston space */
 struct weston_output *
 to_weston_coordinate(RdpPeerContext *peerContext, int32_t *x, int32_t *y, uint32_t *width, uint32_t *height)
@@ -321,7 +329,7 @@ to_weston_coordinate(RdpPeerContext *peerContext, int32_t *x, int32_t *y, uint32
 	wl_list_for_each(head_iter, &b->compositor->head_list, compositor_link) {
 		struct rdp_head *head = to_rdp_head(head_iter);
 
-		if (pixman_region32_contains_point(&head->regionClient, sx, sy, NULL)) {
+		if (rdp_monitor_contains(&head->config, sx, sy)) {
 			struct weston_output *output = head->base.output;
 			float client_scale = disp_get_client_scale_from_monitor(b, &head->config);
 			float scale = 1.0f / client_scale;
