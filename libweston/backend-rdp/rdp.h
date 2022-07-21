@@ -409,7 +409,7 @@ int rdp_clipboard_init(freerdp_peer* client);
 void rdp_clipboard_destroy(RdpPeerContext *peerCtx);
 
 static inline struct rdp_head *
-to_rdp_head(struct weston_head *base)
+to_rdp_head(const struct weston_head *base)
 {
 	return container_of(base, struct rdp_head, base);
 }
