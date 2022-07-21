@@ -504,20 +504,11 @@ rdp_output_set_size(struct weston_output *base,
 	wl_list_for_each(head, &output->base.head_list, output_link) {
 		struct rdp_head *h = to_rdp_head(head);
 
-		weston_head_set_monitor_strings(head, "weston", "rdp", NULL);
-
 		rdp_debug(rdpBackend, "set_size: attached head [%d]: make:%s, mode:%s, name:%s, (%p)\n",
 			h->index, head->make, head->model, head->name, head);
 		rdp_debug(rdpBackend, "set_size: attached head [%d]: x:%d, y:%d, width:%d, height:%d\n",
 			h->index, h->config.x, h->config.y,
 				  h->config.width, h->config.height);
-
-		/* This is a virtual output, so report a zero physical size.
-		 * It's better to let frontends/clients use their defaults. */
-		/* If MonitorDef has it, use it from MonitorDef */
-		weston_head_set_physical_size(head,
-			h->config.attributes.physicalWidth,
-			h->config.attributes.physicalHeight);
 
 		/* In HiDef RAIL mode, set this mode as preferred mode */
 		if (client && client->context->settings->HiDefRemoteApp) {
@@ -697,6 +688,12 @@ rdp_head_create(struct weston_compositor *compositor, BOOL isPrimary, rdpMonitor
 	sprintf(name, "rdp-%x", head->index);
 
 	weston_head_init(&head->base, name);
+	weston_head_set_monitor_strings(&head->base, "weston", "rdp", NULL);
+	if (config)
+		weston_head_set_physical_size(&head->base,
+					      config->attributes.physicalWidth,
+					      config->attributes.physicalHeight);
+
 	weston_head_set_connection_status(&head->base, true);
 	weston_compositor_add_head(compositor, &head->base);
 
