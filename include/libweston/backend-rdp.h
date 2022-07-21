@@ -33,6 +33,8 @@ extern "C" {
 #include <libweston/libweston.h>
 #include <libweston/plugin-registry.h>
 
+#include <freerdp/freerdp.h>
+
 #define WESTON_RDP_MODE_FREQ 60 // Hz
 
 #define WESTON_RDP_OUTPUT_API_NAME "weston_rdp_output_api_v1"
