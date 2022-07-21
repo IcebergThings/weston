@@ -115,6 +115,13 @@ struct wet_layoutput {
 	struct wet_head_array add;	/**< tmp: heads to add as clones */
 };
 
+struct wet_rdp_params {
+	bool enable_hi_dpi_support;
+	bool enable_fractional_hi_dpi_support;
+	bool enable_fractional_hi_dpi_roundup;
+	int debug_desktop_scaling_factor;
+};
+
 struct wet_compositor {
 	struct weston_compositor *compositor;
 	struct weston_config *config;
@@ -124,6 +131,7 @@ struct wet_compositor {
 	int (*simple_output_configure)(struct weston_output *output);
 	bool init_failed;
 	struct wl_list layoutput_list;	/**< wet_layoutput::compositor_link */
+	struct wet_rdp_params rdp_params;
 };
 
 static FILE *weston_logfile = NULL;
@@ -2776,6 +2784,7 @@ load_rdp_backend(struct weston_compositor *c,
 	int ret = 0;
 	struct wet_output_config *parsed_options = wet_init_parsed_options(c);
 	bool audio_tmp;
+	struct wet_compositor *wet = to_wet_compositor(c);
 
 	if (!parsed_options)
 		return -1;
@@ -2846,6 +2855,11 @@ load_rdp_backend(struct weston_compositor *c,
 	} else {
 		config.rail_config.debug_desktop_scaling_factor = 0;
 	}
+
+	wet->rdp_params.enable_hi_dpi_support = config.rail_config.enable_hi_dpi_support;
+	wet->rdp_params.enable_fractional_hi_dpi_support = config.rail_config.enable_fractional_hi_dpi_support;
+	wet->rdp_params.enable_fractional_hi_dpi_roundup = config.rail_config.enable_fractional_hi_dpi_roundup;
+	wet->rdp_params.debug_desktop_scaling_factor = config.rail_config.debug_desktop_scaling_factor;
 
 	config.rail_config.enable_window_zorder_sync = read_rdp_config_bool("WESTON_RDP_WINDOW_ZORDER_SYNC", true);
 	config.rail_config.enable_window_snap_arrange = read_rdp_config_bool("WESTON_RDP_WINDOW_SNAP_ARRANGE", false);
