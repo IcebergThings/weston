@@ -293,15 +293,6 @@ handle_adjust_monitor_layout(freerdp_peer *client, int monitor_count, rdpMonitor
 	return true;
 }
 
-static inline void
-to_weston_scale_only(RdpPeerContext *peer, struct weston_output *output, float scale, int *x, int *y)
-{
-	//rdp_matrix_transform_scale(&output->inverse_matrix, x, y);
-	/* TODO: built-in to matrix */
-	*x = (float)(*x) * scale;
-	*y = (float)(*y) * scale;
-}
-
 static bool
 rdp_monitor_contains(rdpMonitor *monitor, int32_t x, int32_t y)
 {
@@ -338,9 +329,12 @@ to_weston_coordinate(RdpPeerContext *peerContext, int32_t *x, int32_t *y, uint32
 			sx -= head->config.x;
 			sy -= head->config.y;
 			/* scale x/y to client output space. */
-			to_weston_scale_only(peerContext, output, scale, &sx, &sy);
-			if (width && height)
-				to_weston_scale_only(peerContext, output, scale, width, height);
+			sx *= scale;
+			sy *= scale;
+			if (width && height) {
+				*width *= scale;
+				*height *= scale;
+			}
 			/* translate x/y to offset from this output on weston space. */
 			sx += output->x;
 			sy += output->y;
@@ -353,15 +347,6 @@ to_weston_coordinate(RdpPeerContext *peerContext, int32_t *x, int32_t *y, uint32
 	}
 	/* x/y is outside of any monitors. */
 	return NULL;
-}
-
-static inline void
-to_client_scale_only(RdpPeerContext *peer, struct weston_output *output, float scale, int *x, int *y)
-{
-	//rdp_matrix_transform_scale(&output->matrix, x, y);
-	/* TODO: built-in to matrix */
-	*x = (float)(*x) * scale;
-	*y = (float)(*y) * scale;
 }
 
 /* Input x/y in weston space, output x/y in client space */
@@ -381,9 +366,13 @@ to_client_coordinate(RdpPeerContext *peerContext, struct weston_output *output, 
 		sx -= output->x;
 		sy -= output->y;
 		/* scale x/y to client output space. */
-		to_client_scale_only(peerContext, output, scale, &sx, &sy);
-		if (width && height)
-			to_client_scale_only(peerContext, output, scale, width, height);
+		sx *= scale;
+		sy *= scale;
+
+		if (width && height) {
+			*width *= scale;
+			*height *= scale;
+		}
 		/* translate x/y to offset from this output on client space. */
 		sx += head->config.x;
 		sy += head->config.y;
