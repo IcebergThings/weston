@@ -380,14 +380,8 @@ disp_monitor_validate_and_compute_layout(struct weston_compositor *ec)
 
 		/* Notify clients for updated resolution/scale. */
 		weston_output_set_transform(output, WL_OUTPUT_TRANSFORM_NORMAL);
-		i++;
-	}
 
-	/* move output to final location */
-	i = 0;
-	wl_list_for_each(iter, &ec->head_list, compositor_link) {
-		assert(iter->output);
-
+		/* move output to final location */
 		weston_log("move head/output %s (%d,%d) -> (%d,%d)\n",
 			iter->name,
 			iter->output->x,
