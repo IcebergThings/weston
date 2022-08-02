@@ -143,7 +143,7 @@ struct rdp_backend {
 
 #ifdef HAVE_FREERDP_RDPAPPLIST_H
 	/* import from libfreerdp-server2.so */
-	RdpAppListServerContext* (*rdpapplist_server_context_new)(HANDLE vcm);
+	RdpAppListServerContext *(*rdpapplist_server_context_new)(HANDLE vcm);
 	void (*rdpapplist_server_context_free)(RdpAppListServerContext* context);
 
 	void *libRDPApplistServer;
@@ -152,7 +152,7 @@ struct rdp_backend {
 
 #ifdef HAVE_FREERDP_GFXREDIR_H
 	/* import from libfreerdp-server2.so */
-	GfxRedirServerContext* (*gfxredir_server_context_new)(HANDLE vcm);
+	GfxRedirServerContext *(*gfxredir_server_context_new)(HANDLE vcm);
 	void (*gfxredir_server_context_free)(GfxRedirServerContext* context);
 
 	void *libFreeRDPServer;
@@ -221,30 +221,30 @@ struct rdp_peer_context {
 
 	// RAIL support
 	HANDLE vcm;
-	RailServerContext* rail_server_context;
-	DrdynvcServerContext* drdynvc_server_context;
-	DispServerContext* disp_server_context;
-	RdpgfxServerContext* rail_grfx_server_context;
+	RailServerContext *rail_server_context;
+	DrdynvcServerContext *drdynvc_server_context;
+	DispServerContext *disp_server_context;
+	RdpgfxServerContext *rail_grfx_server_context;
 #ifdef HAVE_FREERDP_GFXREDIR_H
-	GfxRedirServerContext* gfxredir_server_context;
+	GfxRedirServerContext *gfxredir_server_context;
 #endif // HAVE_FREERDP_GFXREDIR_H
 #ifdef HAVE_FREERDP_RDPAPPLIST_H
-	RdpAppListServerContext* applist_server_context;
+	RdpAppListServerContext *applist_server_context;
 #endif // HAVE_FREERDP_RDPAPPLIST_H
-	BOOL handshakeCompleted;
-	BOOL activationRailCompleted;
-	BOOL activationGraphicsCompleted;
-	BOOL activationGraphicsRedirectionCompleted;
-	UINT32 clientStatusFlags;
+	bool handshakeCompleted;
+	bool activationRailCompleted;
+	bool activationGraphicsCompleted;
+	bool activationGraphicsRedirectionCompleted;
+	uint32_t clientStatusFlags;
 	struct rdp_id_manager windowId;
 	struct rdp_id_manager surfaceId;
 #ifdef HAVE_FREERDP_GFXREDIR_H
 	struct rdp_id_manager poolId;
 	struct rdp_id_manager bufferId;
 #endif // HAVE_FREERDP_GFXREDIR_H
-	UINT32 currentFrameId;
-	UINT32 acknowledgedFrameId;
-	BOOL isAcknowledgedSuspended;
+	uint32_t currentFrameId;
+	uint32_t acknowledgedFrameId;
+	bool isAcknowledgedSuspended;
 	struct wl_client *clientExec;
 	struct wl_listener clientExec_destroy_listener;
 	struct weston_surface *cursorSurface;
@@ -377,15 +377,15 @@ void rdp_destroy_dispatch_task_event_source(RdpPeerContext *peerCtx);
 // rdprail.c
 int rdp_rail_backend_create(struct rdp_backend *b, struct weston_rdp_backend_config *config);
 void rdp_rail_destroy(struct rdp_backend *b);
-BOOL rdp_rail_peer_activate(freerdp_peer* client);
-void rdp_rail_sync_window_status(freerdp_peer* client);
-BOOL rdp_rail_peer_init(freerdp_peer *client, RdpPeerContext *peerCtx);
-void rdp_rail_peer_context_free(freerdp_peer* client, RdpPeerContext* context);
+bool rdp_rail_peer_activate(freerdp_peer *client);
+void rdp_rail_sync_window_status(freerdp_peer *client);
+bool rdp_rail_peer_init(freerdp_peer *client, RdpPeerContext *peerCtx);
+void rdp_rail_peer_context_free(freerdp_peer *client, RdpPeerContext *context);
 void rdp_rail_output_repaint(struct weston_output *output, pixman_region32_t *damage);
-BOOL rdp_drdynvc_init(freerdp_peer *client);
-void rdp_drdynvc_destroy(RdpPeerContext* context);
-void rdp_rail_start_window_move(struct weston_surface* surface, int pointerGrabX, int pointerGrabY, struct weston_size minSize, struct weston_size maxSize);
-void rdp_rail_end_window_move(struct weston_surface* surface);
+bool rdp_drdynvc_init(freerdp_peer *client);
+void rdp_drdynvc_destroy(RdpPeerContext *context);
+void rdp_rail_start_window_move(struct weston_surface *surface, int pointerGrabX, int pointerGrabY, struct weston_size minSize, struct weston_size maxSize);
+void rdp_rail_end_window_move(struct weston_surface *surface);
 
 // rdpdisp.c
 bool
