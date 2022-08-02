@@ -101,6 +101,16 @@ match_position(struct rdp_backend *rdp, rdpMonitor *a, rdpMonitor *b)
 }
 
 static bool
+match_exact(struct rdp_backend *rdp, rdpMonitor *a, rdpMonitor *b)
+{
+	if (match_dimensions(rdp, a, b) &&
+	    match_position(rdp, a, b))
+		return true;
+
+	return false;
+}
+
+static bool
 match_any(struct rdp_backend *rdp, rdpMonitor *a, rdpMonitor *b)
 {
 	return true;
@@ -191,6 +201,9 @@ disp_start_monitor_layout_change(freerdp_peer *client, rdpMonitor *config, UINT3
 	 * should always be rdp-0.
 	  */
 	match_heads(b, config, monitorCount, &done, match_primary);
+
+	/* Look for any exact match */
+	match_heads(b, config, monitorCount, &done, match_exact);
 
 	/* Match first head with the same dimensions */
 	match_heads(b, config, monitorCount, &done, match_dimensions);
