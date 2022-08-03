@@ -3,6 +3,7 @@ srcs_weston = [
 	'main.c',
 	'rdpaudio.c',
 	'rdpaudioin.c',
+	'rdpdisp.c',
 	'testsuite-util.c',
 	'text-backend.c',
 	'weston-screenshooter.c',

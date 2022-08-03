@@ -35,6 +35,7 @@ if get_option('shell-rdprail')
 		dep_librsvg,
 		dep_winpr,
 		dep_glib,
+		dep_frdp_server,
 	]
 	plugin_shell_rdprail = shared_library(
 		'rdprail-shell',

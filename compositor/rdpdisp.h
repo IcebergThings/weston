@@ -1,5 +1,5 @@
 /*
- * Copyright © 2008 Kristian Høgsberg
+ * Copyright © 2020 Microsoft
  *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files (the
@@ -23,28 +23,19 @@
  * SOFTWARE.
  */
 
-#include "config.h"
+#ifndef RDP_DISP_H
+#define RDP_DISP_H
 
-#include <errno.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
+struct wet_rdp_params {
+	bool enable_hi_dpi_support;
+	bool enable_fractional_hi_dpi_support;
+	bool enable_fractional_hi_dpi_roundup;
+	int debug_desktop_scaling_factor;
+	int default_width;
+	int default_height;
+};
 
-#include "xalloc.h"
+void
+disp_monitor_validate_and_compute_layout(struct weston_compositor *ec);
 
-void *
-fail_on_null(void *p, size_t size, char *file, int32_t line)
-{
-	if (p == NULL) {
-		fprintf(stderr, "[%s] ", program_invocation_short_name);
-		if (file)
-			fprintf(stderr, "%s:%d: ", file, line);
-		fprintf(stderr, "out of memory");
-		if (size)
-			fprintf(stderr, " (%zd)", size);
-		fprintf(stderr, "\n");
-		exit(EXIT_FAILURE);
-	}
-
-	return p;
-}
+#endif

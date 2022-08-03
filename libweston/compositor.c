@@ -5415,7 +5415,23 @@ weston_head_release(struct weston_head *head)
 	wl_list_remove(&head->compositor_link);
 }
 
-static void
+/** Propagate device information changes
+ *
+ * \param head The head that changed.
+ *
+ * The information about the connected display device, e.g. a monitor, may
+ * change without being disconnected in between. Changing information
+ * causes a call to the heads_changed hook.
+ *
+ * Normally this is handled automatically by the generic setters, but if
+ * a backend has
+ * specific head properties it may have to call this directly.
+ *
+ * \sa weston_head_reset_device_changed, weston_compositor_set_heads_changed_cb,
+ * weston_head_is_device_changed
+ * \ingroup head
+ */
+WL_EXPORT void
 weston_head_set_device_changed(struct weston_head *head)
 {
 	head->device_changed = true;
@@ -5839,6 +5855,9 @@ weston_head_get_destroy_listener(struct weston_head *head,
 	return wl_signal_get(&head->destroy_signal, notify);
 }
 
+static void
+weston_output_set_position(struct weston_output *output, int x, int y);
+
 /* Move other outputs when one is resized so the space remains contiguous. */
 static void
 weston_compositor_reflow_outputs(struct weston_compositor *compositor,
@@ -5846,6 +5865,9 @@ weston_compositor_reflow_outputs(struct weston_compositor *compositor,
 {
 	struct weston_output *output;
 	bool start_resizing = false;
+
+	if (compositor->output_flow_dirty)
+		return;
 
 	if (!delta_width)
 		return;
@@ -5857,7 +5879,7 @@ weston_compositor_reflow_outputs(struct weston_compositor *compositor,
 		}
 
 		if (start_resizing) {
-			weston_output_move(output, output->x + delta_width, output->y);
+			weston_output_set_position(output, output->x + delta_width, output->y);
 			output->dirty = 1;
 		}
 	}
@@ -5951,12 +5973,18 @@ weston_output_init_geometry(struct weston_output *output, int x, int y)
 /**
  * \ingroup output
  */
-WL_EXPORT void
-weston_output_move(struct weston_output *output, int x, int y)
+static void
+weston_output_set_position(struct weston_output *output, int x, int y)
 {
 	struct weston_head *head;
 	struct wl_resource *resource;
 	int ver;
+
+	if (!output->enabled) {
+		output->x = x;
+		output->y = y;
+		return;
+	}
 
 	output->move_x = x - output->x;
 	output->move_y = y - output->y;
@@ -5996,6 +6024,28 @@ weston_output_move(struct weston_output *output, int x, int y)
 			zxdg_output_v1_send_done(resource);
 		}
 	}
+}
+
+/**
+ * \ingroup output
+ */
+WL_EXPORT void
+weston_output_move(struct weston_output *output, int x, int y)
+{
+	/* XXX: we should probably perform some sanity checking here
+	 * as we do for weston_output_enable, and allow moves to fail.
+	 *
+	 * However, while a front-end is rearranging outputs it may
+	 * pass through indeterminate states where outputs overlap
+	 * or are discontinuous, and this may be ok as long as no
+	 * input processing or rendering occurs at that time.
+	 *
+	 * Ultimately, we probably need a way to pass complete output
+	 * config atomically to libweston.
+	 */
+
+	output->compositor->output_flow_dirty = true;
+	weston_output_set_position(output, x, y);
 }
 
 /** Signal that a pending output is taken into use.
@@ -6335,6 +6385,45 @@ weston_output_create_heads_string(struct weston_output *output)
 	return str;
 }
 
+static bool
+weston_outputs_overlap(struct weston_output *a, struct weston_output *b)
+{
+	bool overlap;
+	pixman_region32_t intersection;
+
+	pixman_region32_init(&intersection);
+	pixman_region32_intersect(&intersection, &a->region, &b->region);
+	overlap = pixman_region32_not_empty(&intersection);
+	pixman_region32_fini(&intersection);
+
+	return overlap;
+}
+
+/* This only works if the output region is current!
+ *
+ * That means we shouldn't expect it to return usable results unless
+ * the output is at least undergoing enabling.
+ */
+static bool
+weston_output_placement_ok(struct weston_output *output)
+{
+	struct weston_compositor *c = output->compositor;
+	struct weston_output *iter;
+
+	wl_list_for_each(iter, &c->output_list, link) {
+		if (!iter->enabled)
+			continue;
+
+		if (weston_outputs_overlap(iter, output)) {
+			weston_log("Error: output '%s' overlaps enabled output '%s'.\n",
+				   output->name, iter->name);
+			return false;
+		}
+	}
+
+	return true;
+}
+
 /** Constructs a weston_output object that can be used by the compositor.
  *
  * \param output The weston_output object that needs to be enabled. Must not
@@ -6373,11 +6462,8 @@ weston_output_create_heads_string(struct weston_output *output)
 WL_EXPORT int
 weston_output_enable(struct weston_output *output)
 {
-	struct weston_compositor *c = output->compositor;
-	struct weston_output *iterator;
 	struct weston_head *head;
 	char *head_names;
-	int x = 0, y = 0;
 
 	if (output->enabled) {
 		weston_log("Error: attempt to enable an enabled output '%s'\n",
@@ -6402,24 +6488,12 @@ weston_output_enable(struct weston_output *output)
 		assert(head->model);
 	}
 
-	iterator = container_of(c->output_list.prev,
-				struct weston_output, link);
-
-	/* TODO: no need for auto arrange position for HiRAIL with RDP-backend, */
-	/*       it's better here does query position from backend and init */
-	/*       geomerty with it, so no need to re-arrage and re-init with */
-	/*       the position specified by backend */
-	if (!wl_list_empty(&c->output_list))
-		x = iterator->x + iterator->width;
-
 	/* Make sure the scale is set up */
 	assert(output->scale);
 
 	/* Make sure we have a transform set */
 	assert(output->transform != UINT32_MAX);
 
-	output->x = x;
-	output->y = y;
 	output->dirty = 1;
 	output->original_scale = output->scale;
 
@@ -6429,7 +6503,12 @@ weston_output_enable(struct weston_output *output)
 	weston_output_transform_scale_init(output, output->transform, output->scale);
 	weston_output_init_zoom(output);
 
-	weston_output_init_geometry(output, x, y);
+	weston_output_init_geometry(output, output->x, output->y);
+
+	/* At this point we have a valid region so we can check placement. */
+	if (!weston_output_placement_ok(output))
+		return -1;
+
 	weston_output_damage(output);
 
 	wl_list_init(&output->animation_list);

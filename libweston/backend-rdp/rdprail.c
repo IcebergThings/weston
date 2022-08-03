@@ -45,6 +45,7 @@
 #include "rdp.h"
 
 #include "libweston-internal.h"
+#include "shared/xalloc.h"
 
 #define RAIL_WINDOW_FULLSCREEN_STYLE (WS_POPUP | WS_VISIBLE | WS_CLIPSIBLINGS | WS_GROUP | WS_TABSTOP)
 #define RAIL_WINDOW_NORMAL_STYLE (RAIL_WINDOW_FULLSCREEN_STYLE | WS_THICKFRAME | WS_CAPTION)
@@ -851,7 +852,7 @@ rail_client_LanguageImeInfo_callback(bool freeOnly, void *arg)
 	struct rdp_rail_dispatch_data* data = wl_container_of(arg, data, task_base);
 	const RAIL_LANGUAGEIME_INFO_ORDER* languageImeInfo = &data->u_languageImeInfo;
 	freerdp_peer *client = data->client;
-	rdpSettings *settings = client->settings;
+	rdpSettings *settings = client->context->settings;
 	RdpPeerContext *peerCtx = (RdpPeerContext *)client->context;
 	struct rdp_backend *b = peerCtx->rdpBackend;
 	UINT32 new_keyboard_layout = 0;
@@ -1266,9 +1267,9 @@ rdp_rail_update_cursor(struct weston_surface *surface)
 		/* hide pointer */
 		POINTER_SYSTEM_UPDATE pointerSystem = {};
 		pointerSystem.type = SYSPTR_NULL;
-		b->rdp_peer->update->BeginPaint(b->rdp_peer->update->context);
-		b->rdp_peer->update->pointer->PointerSystem(b->rdp_peer->update->context, &pointerSystem);
-		b->rdp_peer->update->EndPaint(b->rdp_peer->update->context);
+		b->rdp_peer->context->update->BeginPaint(b->rdp_peer->context->update->context);
+		b->rdp_peer->context->update->pointer->PointerSystem(b->rdp_peer->context->update->context, &pointerSystem);
+		b->rdp_peer->context->update->EndPaint(b->rdp_peer->context->update->context);
 	} else if (isCursorResized || isCursorDamanged) {
 		POINTER_LARGE_UPDATE pointerUpdate = {};
 		int cursorBpp = 4; // Bytes Per Pixel.
@@ -1302,9 +1303,9 @@ rdp_rail_update_cursor(struct weston_surface *surface)
 		pointerUpdate.andMaskData = NULL;
 
 		rdp_debug_verbose(b, "CursorUpdate(width %d, height %d)\n", newPos.width, newPos.height);
-		b->rdp_peer->update->BeginPaint(b->rdp_peer->update->context);
-		b->rdp_peer->update->pointer->PointerLarge(b->rdp_peer->update->context, &pointerUpdate);
-		b->rdp_peer->update->EndPaint(b->rdp_peer->update->context);
+		b->rdp_peer->context->update->BeginPaint(b->rdp_peer->context->update->context);
+		b->rdp_peer->context->update->pointer->PointerLarge(b->rdp_peer->context->update->context, &pointerUpdate);
+		b->rdp_peer->context->update->EndPaint(b->rdp_peer->context->update->context);
 
 		free(pointerBits);
 	}
@@ -1343,7 +1344,7 @@ rdp_rail_create_window(struct wl_listener *listener, void *data)
 		return;
 	}
 
-	if (!b->rdp_peer->settings->HiDefRemoteApp)
+	if (!b->rdp_peer->context->settings->HiDefRemoteApp)
 		return;
 
 	if (!b->rdp_peer->context) {
@@ -1537,9 +1538,9 @@ rdp_rail_create_window(struct wl_listener *listener, void *data)
 
 	rdp_debug_verbose(b, "WindowCreate(0x%x - (%d, %d, %d, %d)\n",
 		window_id, clientPos.x, clientPos.y, clientPos.width, clientPos.height);
-	b->rdp_peer->update->BeginPaint(b->rdp_peer->update->context);
-	b->rdp_peer->update->window->WindowCreate(b->rdp_peer->update->context, &window_order_info, &window_state_order);
-	b->rdp_peer->update->EndPaint(b->rdp_peer->update->context);
+	b->rdp_peer->context->update->BeginPaint(b->rdp_peer->context->update->context);
+	b->rdp_peer->context->update->window->WindowCreate(b->rdp_peer->context->update->context, &window_order_info, &window_state_order);
+	b->rdp_peer->context->update->EndPaint(b->rdp_peer->context->update->context);
 
 	rail_state->parent_window_id = window_state_order.ownerWindowId;
 	rail_state->pos = pos;
@@ -1634,9 +1635,9 @@ rdp_rail_destroy_window(struct wl_listener *listener, void *data)
 	peerCtx = (RdpPeerContext *)b->rdp_peer->context;
 	if (rail_state->isCursor) {
 		pointerSystem.type = SYSPTR_NULL;
-		b->rdp_peer->update->BeginPaint(b->rdp_peer->update->context);
-		b->rdp_peer->update->pointer->PointerSystem(b->rdp_peer->update->context, &pointerSystem);
-		b->rdp_peer->update->EndPaint(b->rdp_peer->update->context);
+		b->rdp_peer->context->update->BeginPaint(b->rdp_peer->context->update->context);
+		b->rdp_peer->context->update->pointer->PointerSystem(b->rdp_peer->context->update->context, &pointerSystem);
+		b->rdp_peer->context->update->EndPaint(b->rdp_peer->context->update->context);
 		if (peerCtx->cursorSurface == surface) 
 			peerCtx->cursorSurface = NULL;
 		rail_state->isCursor = false;
@@ -1671,9 +1672,9 @@ rdp_rail_destroy_window(struct wl_listener *listener, void *data)
 			window_order_info.fieldFlags = WINDOW_ORDER_TYPE_WINDOW | WINDOW_ORDER_STATE_DELETED;
 
 			rdp_debug_verbose(b, "WindowDestroy(0x%x)\n", window_id);
-			b->rdp_peer->update->BeginPaint(b->rdp_peer->update->context);
-			b->rdp_peer->update->window->WindowDelete(b->rdp_peer->update->context, &window_order_info);
-			b->rdp_peer->update->EndPaint(b->rdp_peer->update->context);
+			b->rdp_peer->context->update->BeginPaint(b->rdp_peer->context->update->context);
+			b->rdp_peer->context->update->window->WindowDelete(b->rdp_peer->context->update->context, &window_order_info);
+			b->rdp_peer->context->update->EndPaint(b->rdp_peer->context->update->context);
 
 			if (rail_state->surface_id) {
 
@@ -2210,9 +2211,9 @@ rdp_rail_update_window(struct weston_surface *surface, struct update_window_iter
 					window_id, newPos.x, newPos.y, newClientPos.x, newClientPos.y);
 		}
 
-		b->rdp_peer->update->BeginPaint(b->rdp_peer->update->context);
-		b->rdp_peer->update->window->WindowUpdate(b->rdp_peer->update->context, &window_order_info, &window_state_order);
-		b->rdp_peer->update->EndPaint(b->rdp_peer->update->context);
+		b->rdp_peer->context->update->BeginPaint(b->rdp_peer->context->update->context);
+		b->rdp_peer->context->update->window->WindowUpdate(b->rdp_peer->context->update->context, &window_order_info, &window_state_order);
+		b->rdp_peer->context->update->EndPaint(b->rdp_peer->context->update->context);
 
 		if (rail_window_title_string.string)
 			free(rail_window_title_string.string);
@@ -2770,7 +2771,7 @@ rdp_rail_sync_window_zorder(struct weston_compositor *compositor)
 	monitored_desktop_order.numWindowIds = iCurrent;
 	monitored_desktop_order.windowIds = windowIdArray;
 
-	client->update->window->MonitoredDesktop(client->context, &window_order_info, &monitored_desktop_order);
+	client->context->update->window->MonitoredDesktop(client->context, &window_order_info, &monitored_desktop_order);
 	client->DrainOutputBuffer(client);
 
 Exit:
@@ -2819,12 +2820,117 @@ rdp_rail_output_repaint(struct weston_output *output, pixman_region32_t *damage)
 	return;
 }
 
+static void
+disp_force_recreate_iter(void *element, void *data)
+{
+	struct weston_surface *surface = element;
+	struct weston_surface_rail_state *rail_state = surface->backend_state;
+
+	rail_state->forceRecreateSurface = TRUE;
+	rail_state->forceUpdateWindowState = TRUE;
+}
+
+struct disp_schedule_monitor_layout_change_data {
+	struct rdp_loop_task _base;
+	DispServerContext *context;
+	int count;
+	rdpMonitor *monitors;
+};
+
+static void
+disp_monitor_layout_change_callback(bool freeOnly, void *dataIn)
+{
+	struct disp_schedule_monitor_layout_change_data *data = wl_container_of(dataIn, data, _base);
+	DispServerContext *context = data->context;
+	freerdp_peer *client = (freerdp_peer *)context->custom;
+	RdpPeerContext *peerCtx = (RdpPeerContext *)client->context;
+	struct rdp_backend *b = peerCtx->rdpBackend;
+	RDPGFX_RESET_GRAPHICS_PDU reset_graphics = {};
+	MONITOR_DEF *reset_monitor_def;
+
+	assert_compositor_thread(b);
+
+	if (freeOnly)
+		goto out;
+
+	/* Skip reset graphics on failure */
+	if (!handle_adjust_monitor_layout(client, data->count, data->monitors))
+		goto out;
+
+	reset_monitor_def = xmalloc(sizeof(MONITOR_DEF) * data->count);
+
+	for (int i = 0; i < data->count; i++) {
+		reset_monitor_def[i].left = data->monitors[i].x;
+		reset_monitor_def[i].top = data->monitors[i].y;
+		reset_monitor_def[i].right = data->monitors[i].width;
+		reset_monitor_def[i].bottom = data->monitors[i].height;
+		reset_monitor_def[i].flags = data->monitors[i].is_primary;
+        }
+
+	/* tell client the server updated the monitor layout */
+	reset_graphics.width = peerCtx->desktop_width;
+	reset_graphics.height = peerCtx->desktop_height;
+	reset_graphics.monitorCount = data->count;
+	reset_graphics.monitorDefArray = reset_monitor_def;
+	peerCtx->rail_grfx_server_context->ResetGraphics(peerCtx->rail_grfx_server_context, &reset_graphics);
+
+	/* force recreate all surface and redraw. */
+	rdp_id_manager_for_each(&peerCtx->windowId, disp_force_recreate_iter, NULL);
+	weston_compositor_damage_all(b->compositor);
+out:
+	free(reset_monitor_def);
+	free(data);
+	return;
+}
+
+static unsigned int
+disp_client_monitor_layout_change(DispServerContext *context, const DISPLAY_CONTROL_MONITOR_LAYOUT_PDU *display_control)
+{
+	freerdp_peer *client = (freerdp_peer*)context->custom;
+	RdpPeerContext *peerCtx = (RdpPeerContext *)client->context;
+	rdpSettings *settings = client->context->settings;
+	struct rdp_backend *b = peerCtx->rdpBackend;
+	struct disp_schedule_monitor_layout_change_data *data;
+	unsigned int i;
+
+	assert_not_compositor_thread(b);
+
+	rdp_debug(b, "Client: DisplayLayoutChange: monitor count:0x%x\n", display_control->NumMonitors);
+
+	assert(settings->HiDefRemoteApp);
+
+	data = xmalloc(sizeof(*data) + (sizeof(rdpMonitor) * display_control->NumMonitors));
+
+	data->context = context;
+	data->monitors = (rdpMonitor *)(data + 1);
+	data->count = display_control->NumMonitors;
+	for (i = 0; i < display_control->NumMonitors; i++) {
+		DISPLAY_CONTROL_MONITOR_LAYOUT *ml = &display_control->Monitors[i];
+
+		data->monitors[i].x = ml->Left;
+		data->monitors[i].y = ml->Top;
+		data->monitors[i].width = ml->Width;
+		data->monitors[i].height = ml->Height;
+		data->monitors[i].is_primary = !!(ml->Flags & DISPLAY_CONTROL_MONITOR_PRIMARY);
+		data->monitors[i].attributes.physicalWidth = ml->PhysicalWidth;
+		data->monitors[i].attributes.physicalHeight = ml->PhysicalHeight;
+		data->monitors[i].attributes.orientation = ml->Orientation;
+		data->monitors[i].attributes.desktopScaleFactor = ml->DesktopScaleFactor;
+		data->monitors[i].attributes.deviceScaleFactor = ml->DeviceScaleFactor;
+		data->monitors[i].orig_screen = 0;
+	}
+
+	rdp_dispatch_task_to_display_loop(peerCtx, disp_monitor_layout_change_callback, &data->_base);
+
+	return CHANNEL_RC_OK;
+}
+
 BOOL
 rdp_rail_peer_activate(freerdp_peer* client)
 {
 	RdpPeerContext *peerCtx = (RdpPeerContext *)client->context;
 	struct rdp_backend *b = peerCtx->rdpBackend;
-	rdpSettings *settings = client->settings;
+	rdpSettings *settings = client->context->settings;
 	BOOL rail_server_started = FALSE;
 	BOOL disp_server_opened = FALSE;
 	BOOL rail_grfx_server_opened = FALSE;
@@ -3133,7 +3239,7 @@ rdp_rail_sync_window_status(freerdp_peer* client)
 		window_order_info.windowId = RDP_RAIL_MARKER_WINDOW_ID;
 		window_order_info.fieldFlags = WINDOW_ORDER_TYPE_DESKTOP | WINDOW_ORDER_FIELD_DESKTOP_HOOKED | WINDOW_ORDER_FIELD_DESKTOP_ARC_BEGAN;
 
-		client->update->window->MonitoredDesktop(client->update->context, &window_order_info, &monitored_desktop_order);
+		client->context->update->window->MonitoredDesktop(client->context->update->context, &window_order_info, &monitored_desktop_order);
 		client->DrainOutputBuffer(client);
 	}
 
@@ -3150,7 +3256,7 @@ rdp_rail_sync_window_status(freerdp_peer* client)
 		windowsIdArray[0] = RDP_RAIL_MARKER_WINDOW_ID;
 		monitored_desktop_order.windowIds = (UINT*)&windowsIdArray;
 
-		client->update->window->MonitoredDesktop(client->update->context, &window_order_info, &monitored_desktop_order);
+		client->context->update->window->MonitoredDesktop(client->context->update->context, &window_order_info, &monitored_desktop_order);
 		client->DrainOutputBuffer(client);
 	}
 
@@ -3161,7 +3267,7 @@ rdp_rail_sync_window_status(freerdp_peer* client)
 		window_order_info.windowId = RDP_RAIL_MARKER_WINDOW_ID;
 		window_order_info.fieldFlags = WINDOW_ORDER_TYPE_DESKTOP | WINDOW_ORDER_FIELD_DESKTOP_ARC_COMPLETED;
 
-		client->update->window->MonitoredDesktop(client->update->context, &window_order_info, &monitored_desktop_order);
+		client->context->update->window->MonitoredDesktop(client->context->update->context, &window_order_info, &monitored_desktop_order);
 		client->DrainOutputBuffer(client);
 	}
 
@@ -3228,7 +3334,7 @@ rdp_rail_start_window_move(
 	RAIL_MINMAXINFO_ORDER minmax_order;
 	RAIL_LOCALMOVESIZE_ORDER move_order;
 
-	if (!b->rdp_peer || !b->rdp_peer->settings->HiDefRemoteApp) {
+	if (!b->rdp_peer || !b->rdp_peer->context->settings->HiDefRemoteApp) {
 			return;
 	}
 
@@ -3328,7 +3434,7 @@ rdp_rail_end_window_move(struct weston_surface* surface)
 	RdpPeerContext *peerCtx = NULL;
 	RAIL_LOCALMOVESIZE_ORDER move_order;
 
-	if (!b->rdp_peer || !b->rdp_peer->settings->HiDefRemoteApp) {
+	if (!b->rdp_peer || !b->rdp_peer->context->settings->HiDefRemoteApp) {
 		return;
 	}
 
@@ -3453,9 +3559,6 @@ rdp_rail_peer_context_free(freerdp_peer* client, RdpPeerContext* context)
 #endif // HAVE_FREERDP_GFXREDIR_H
 	rdp_id_manager_free(&context->surfaceId);
 	rdp_id_manager_free(&context->windowId);
-
-	pixman_region32_fini(&context->regionClientHeads);
-	pixman_region32_fini(&context->regionWestonHeads);
 }
 
 BOOL
@@ -3534,9 +3637,6 @@ rdp_rail_peer_init(freerdp_peer *client, RdpPeerContext *peerCtx)
 	peerCtx->currentFrameId = 0;
 	peerCtx->acknowledgedFrameId = 0;
 
-	pixman_region32_init(&peerCtx->regionClientHeads);
-	pixman_region32_init(&peerCtx->regionWestonHeads);
-
 	return TRUE;
 
 error_return:
@@ -3585,30 +3685,30 @@ print_matrix(FILE *fp, const char *name, const struct weston_matrix *matrix)
 static void
 print_rdp_head(FILE *fp, const struct rdp_head *current)
 {
+	const struct weston_head *wh = &current->base;
+	struct weston_compositor *ec = wh->compositor;
+	struct rdp_backend *b = to_rdp_backend(ec);
+	float client_scale = disp_get_client_scale_from_monitor(b, &current->config);
+	int scale = disp_get_output_scale_from_monitor(b, &current->config);
+
 	fprintf(fp,"    rdp_head: %s: index:%d: is_primary:%d\n",
 		current->base.name, current->index,
-		current->monitorMode.monitorDef.is_primary);
+		current->config.is_primary);
 	fprintf(fp,"    x:%d, y:%d, RDP client x:%d, y:%d\n",
 		current->base.output->x, current->base.output->y,
-		current->monitorMode.monitorDef.x, current->monitorMode.monitorDef.y);
+		current->config.x, current->config.y);
 	fprintf(fp,"    width:%d, height:%d, RDP client width:%d, height: %d\n",
 		current->base.output->width, current->base.output->height,
-		current->monitorMode.monitorDef.width, current->monitorMode.monitorDef.height);
+		current->config.width, current->config.height);
 	fprintf(fp,"    physicalWidth:%dmm, physicalHeight:%dmm, orientation:%d\n",
-		current->monitorMode.monitorDef.attributes.physicalWidth,
-		current->monitorMode.monitorDef.attributes.physicalHeight,
-		current->monitorMode.monitorDef.attributes.orientation);
+		current->config.attributes.physicalWidth,
+		current->config.attributes.physicalHeight,
+		current->config.attributes.orientation);
 	fprintf(fp,"    desktopScaleFactor:%d, deviceScaleFactor:%d\n",
-		current->monitorMode.monitorDef.attributes.desktopScaleFactor,
-		current->monitorMode.monitorDef.attributes.deviceScaleFactor);
+		current->config.attributes.desktopScaleFactor,
+		current->config.attributes.deviceScaleFactor);
 	fprintf(fp,"    scale:%d, client scale :%3.2f\n",
-		current->monitorMode.scale, current->monitorMode.clientScale);
-	fprintf(fp,"    regionClient: x1:%d, y1:%d, x2:%d, y2:%d\n",
-		current->regionClient.extents.x1, current->regionClient.extents.y1,
-		current->regionClient.extents.x2, current->regionClient.extents.y2);
-	fprintf(fp,"    regionWeston: x1:%d, y1:%d, x2:%d, y2:%d\n",
-		current->regionWeston.extents.x1, current->regionWeston.extents.y1,
-		current->regionWeston.extents.x2, current->regionWeston.extents.y2);
+		scale, client_scale);
 	fprintf(fp,"    workarea: x:%d, y:%d, width:%d, height:%d\n",
 		current->workarea.x, current->workarea.y,
 		current->workarea.width, current->workarea.height);
@@ -3636,15 +3736,17 @@ rdp_rail_dump_monitor_binding(struct weston_keyboard *keyboard,
 {
 	struct rdp_backend *b = (struct rdp_backend *)data;
 	if (b) {
-		struct rdp_head *current;
+		struct weston_head *current;
 		int err;
 		char *str;
 		size_t len;
 		FILE *fp = open_memstream(&str, &len);
 		assert(fp);
 		fprintf(fp,"\nrdp debug binding 'M' - dump all monitor.\n");
-		wl_list_for_each(current, &b->head_list, link) {
-			print_rdp_head(fp, current);
+		wl_list_for_each(current, &b->compositor->head_list, compositor_link) {
+			struct rdp_head *head = to_rdp_head(current);
+
+			print_rdp_head(fp, head);
 			fprintf(fp,"\n");
 		}
 		err = fclose(fp);
@@ -3868,7 +3970,7 @@ rdp_rail_set_window_icon(struct weston_surface *surface, pixman_image_t *icon)
 
 	peerCtx = (RdpPeerContext *)b->rdp_peer->context;
 
-	if (!b->rdp_peer->settings->HiDefRemoteApp)
+	if (!b->rdp_peer->context->settings->HiDefRemoteApp)
 		return;
 
 	assert_compositor_thread(b);
@@ -4011,9 +4113,9 @@ rdp_rail_set_window_icon(struct weston_surface *surface, pixman_image_t *icon)
 	iconInfo.bitsColor = bitsColor;
 	iconOrder.iconInfo = &iconInfo;
 
-	b->rdp_peer->update->BeginPaint(b->rdp_peer->update->context);
-	b->rdp_peer->update->window->WindowIcon(b->rdp_peer->update->context, &orderInfo, &iconOrder);
-	b->rdp_peer->update->EndPaint(b->rdp_peer->update->context);
+	b->rdp_peer->context->update->BeginPaint(b->rdp_peer->context->update->context);
+	b->rdp_peer->context->update->window->WindowIcon(b->rdp_peer->context->update->context, &orderInfo, &iconOrder);
+	b->rdp_peer->context->update->EndPaint(b->rdp_peer->context->update->context);
 
 exit:
 	if (bitsMask)
@@ -4038,7 +4140,7 @@ rdp_rail_notify_app_list(void *rdp_backend, struct weston_rdprail_app_list_data 
 		return false; // return false only when peer is not ready for possible re-send.
 	}
 
-	if (!b->rdp_peer->settings->HiDefRemoteApp)
+	if (!b->rdp_peer->context->settings->HiDefRemoteApp)
 		return true;
 
 	peerCtx = (RdpPeerContext *)b->rdp_peer->context;
@@ -4169,10 +4271,13 @@ static struct weston_output *
 rdp_rail_get_primary_output(void *rdp_backend)
 {
 	struct rdp_backend *b = (struct rdp_backend*)rdp_backend;
-	struct rdp_head *current;
-	wl_list_for_each(current, &b->head_list, link) {
-		if (current->monitorMode.monitorDef.is_primary)
-			return current->base.output;
+	struct weston_head *current;
+
+	wl_list_for_each(current, &b->compositor->head_list, compositor_link) {
+		struct rdp_head *head = to_rdp_head(current);
+
+		if (head->config.is_primary)
+			return current->output;
 	}
 	return NULL;
 }

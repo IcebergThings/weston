@@ -33,21 +33,19 @@ extern "C" {
 #include <libweston/libweston.h>
 #include <libweston/plugin-registry.h>
 
+#include <freerdp/freerdp.h>
+
 #define WESTON_RDP_MODE_FREQ 60 // Hz
 
 #define WESTON_RDP_OUTPUT_API_NAME "weston_rdp_output_api_v1"
 
 struct weston_rdp_output_api {
-	/** Initialize a RDP output with specified width and height.
-	 *
-	 * Returns 0 on success, -1 on failure.
-	 */
-	int (*output_set_size)(struct weston_output *output,
-			       int width, int height);
 	/** Get config from RDP client when connected
 	 */
-	int (*output_get_config)(struct weston_output *output,
-			         int *width, int *height, int *scale);
+	rdpMonitor *(*head_get_rdpmonitor)(const struct weston_head *head);
+
+	/** Set mode for an output */
+	void (*output_set_mode)(struct weston_output *base, struct weston_mode *mode);
 };
 
 static inline const struct weston_rdp_output_api *

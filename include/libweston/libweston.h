@@ -1085,6 +1085,7 @@ struct weston_compositor {
 	struct wl_list plugin_api_list; /* struct weston_plugin_api::link */
 
 	uint32_t output_id_pool;
+	bool output_flow_dirty;
 
 	struct xkb_rule_names xkb_names;
 	struct xkb_context *xkb_context;
@@ -1958,6 +1959,9 @@ weston_head_is_device_changed(struct weston_head *head);
 
 bool
 weston_head_is_non_desktop(struct weston_head *head);
+
+void
+weston_head_set_device_changed(struct weston_head *head);
 
 void
 weston_head_reset_device_changed(struct weston_head *head);

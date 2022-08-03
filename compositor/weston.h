@@ -61,6 +61,9 @@ weston_watch_process(struct weston_process *process);
 struct weston_config *
 wet_get_config(struct weston_compositor *compositor);
 
+struct wet_rdp_params *
+wet_get_rdp_params(struct weston_compositor *);
+
 void *
 wet_load_module_entrypoint(const char *name, const char *entrypoint);
 
