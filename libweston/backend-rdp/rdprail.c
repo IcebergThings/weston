@@ -4549,7 +4549,7 @@ rdp_rail_notify_app_list(void *rdp_backend,
 
 		if (app_list_data->appGroup &&
 		    utf8_string_to_rail_string(app_list_data->appGroup, &delete_app_list.appGroup)) {
-			deleteAppList.flags |= RDPAPPLIST_FIELD_GROUP;
+			delete_app_list.flags |= RDPAPPLIST_FIELD_GROUP;
 		}
 		applist_ctx->DeleteApplicationList(applist_ctx, &delete_app_list);
 	Exit_deletePath:
@@ -4561,7 +4561,7 @@ rdp_rail_notify_app_list(void *rdp_backend,
 		del_provider.flags = RDPAPPLIST_FIELD_PROVIDER;
 		if (app_list_data->appProvider &&
 		    utf8_string_to_rail_string(app_list_data->appProvider, &del_provider.appListProviderName))
-			applist_ctx->DeleteApplicationListProvider(applistctx, &del_provider);
+			applist_ctx->DeleteApplicationListProvider(applist_ctx, &del_provider);
 		free(del_provider.appListProviderName.string);
 	} else {
 		RDPAPPLIST_UPDATE_APPLIST_PDU update_app_list = {};
@@ -4611,7 +4611,7 @@ rdp_rail_notify_app_list(void *rdp_backend,
 			iconData.iconFormat = RDPAPPLIST_ICON_FORMAT_BMP;
 			iconData.iconBitsLength = iconData.iconHeight * iconData.iconStride;
 			iconData.iconBits = xmalloc(iconData.iconBitsLength);
-			char *src = pixman_image_get_data(app_list_data->appIcon);
+			char *src = (char *)pixman_image_get_data(app_list_data->appIcon);
 			char *dst = (char *)iconData.iconBits + (iconData.iconHeight-1) * iconData.iconStride;
 
 			for (uint32_t i = 0; i < iconData.iconHeight; i++) {
