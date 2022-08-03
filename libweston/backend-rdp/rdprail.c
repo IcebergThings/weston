@@ -3332,8 +3332,7 @@ rdp_rail_peer_activate(freerdp_peer* client)
 #ifdef HAVE_FREERDP_RDPAPPLIST_H
 	RdpAppListServerContext *applist_ctx;
 	/* open Application List channel. */
-	if (api && b->rdprail_shell_name && b->use_rdpapplist) {
-
+	if (b->rdprail_shell_name && b->use_rdpapplist) {
 		applist_ctx = b->rdpapplist_server_context_new(peer_ctx->vcm);
 		if (!applist_ctx)
 			goto error_exit;
