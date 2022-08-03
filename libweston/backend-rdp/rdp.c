@@ -355,31 +355,27 @@ finish_frame_handler(void *data)
 }
 
 static struct weston_mode *
-rdp_insert_new_mode(struct weston_output *output, int width, int height, int rate)
-{
-	struct weston_mode *ret;
-	ret = zalloc(sizeof *ret);
-	if (!ret)
-		return NULL;
-	ret->width = width;
-	ret->height = height;
-	ret->refresh = rate;
-	wl_list_insert(&output->mode_list, &ret->link);
-	return ret;
-}
-
-static struct weston_mode *
-ensure_matching_mode(struct weston_output *output, struct weston_mode *target)
+ensure_mode(struct weston_output *output, struct weston_mode *target)
 {
 	struct rdp_backend *b = to_rdp_backend(output->compositor);
-	struct weston_mode *local;
+	struct weston_mode *iter, *mode = NULL;
 
-	wl_list_for_each(local, &output->mode_list, link) {
-		if ((local->width == target->width) && (local->height == target->height))
-			return local;
+	wl_list_for_each(iter, &output->mode_list, link) {
+		mode = iter;
+		break;
 	}
 
-	return rdp_insert_new_mode(output, target->width, target->height, b->rdp_monitor_refresh_rate);
+	if (!mode) {
+		mode = xzalloc(sizeof *mode);
+		wl_list_insert(&output->mode_list, &mode->link);
+	}
+
+	mode->width = target->width;
+	mode->height = target->height;
+	mode->refresh = target->refresh;
+	mode->flags = WL_OUTPUT_MODE_CURRENT | WL_OUTPUT_MODE_PREFERRED;
+
+	return mode;
 }
 
 static void
@@ -395,12 +391,7 @@ rdp_output_set_mode(struct weston_output *base, struct weston_mode *mode)
 	rdpSettings *settings;
 
 	mode->refresh = b->rdp_monitor_refresh_rate;
-	cur = ensure_matching_mode(base, mode);
-	cur->flags |= WL_OUTPUT_MODE_CURRENT;
-	cur->flags |= WL_OUTPUT_MODE_PREFERRED;
-
-	if (base->current_mode)
-		base->current_mode->flags = 0;
+	cur = ensure_mode(base, mode);
 
 	base->current_mode = cur;
 	base->native_mode = cur;
