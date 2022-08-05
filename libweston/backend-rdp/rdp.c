@@ -357,7 +357,6 @@ finish_frame_handler(void *data)
 static struct weston_mode *
 ensure_mode(struct weston_output *output, struct weston_mode *target)
 {
-	struct rdp_backend *b = to_rdp_backend(output->compositor);
 	struct weston_mode *iter, *mode = NULL;
 
 	wl_list_for_each(iter, &output->mode_list, link) {
