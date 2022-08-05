@@ -877,10 +877,10 @@ weston_wm_handle_configure_request(struct weston_wm *wm, xcb_generic_event_t *ev
 	int i = 0;
 	bool is_our_resource = our_resource(wm, configure_request->window);
 
-	wm_printf(wm, "XCB_CONFIGURE_REQUEST (window %d) %d,%d @ %dx%d mask 0x%x%s\n",
+	wm_printf(wm, "XCB_CONFIGURE_REQUEST (window %d) %dx%d @ %d,%d mask 0x%x%s\n",
 		  configure_request->window,
-		  configure_request->x, configure_request->y,
 		  configure_request->width, configure_request->height,
+		  configure_request->x, configure_request->y,
 		  configure_request->value_mask,
 		  is_our_resource ? ", ours" : "");
 
@@ -977,10 +977,10 @@ weston_wm_handle_configure_notify(struct weston_wm *wm, xcb_generic_event_t *eve
 	struct weston_wm_window *window;
 	bool is_our_resource = our_resource(wm, configure_notify->window);
 
-	wm_printf(wm, "XCB_CONFIGURE_NOTIFY (window %d) %d,%d @ %dx%d%s%s\n",
+	wm_printf(wm, "XCB_CONFIGURE_NOTIFY (window %d) %dx%d @ %d,%d%s%s\n",
 		  configure_notify->window,
-		  configure_notify->x, configure_notify->y,
 		  configure_notify->width, configure_notify->height,
+		  configure_notify->x, configure_notify->y,
 		  configure_notify->override_redirect ? ", override" : "",
 		  is_our_resource ? ", ours" : "");
 
@@ -1299,7 +1299,8 @@ weston_wm_window_create_frame(struct weston_wm_window *window)
 			  32,
 			  window->frame_id,
 			  wm->screen->root,
-			  SHRT_MIN, SHRT_MIN, /* see XCB_CONFIGURE_NOTIFY */
+			  window->override_redirect ? 0 : SHRT_MIN,
+			  window->override_redirect ? 0 : SHRT_MIN, /* see XCB_CONFIGURE_NOTIFY */
 			  width, height,
 			  0,
 			  XCB_WINDOW_CLASS_INPUT_OUTPUT,
@@ -3355,8 +3356,11 @@ xserver_map_shell_surface(struct weston_wm_window *window,
 						   window->surface,
 						   &shell_client);
 
-	wm_printf(wm, "XWM: map shell surface, win %d, weston_surface %p, xwayland surface %p\n",
-		  window->id, window->surface, window->shsurf);
+	wm_printf(wm, "XWM: map shell surface, win %d, weston_surface %p, xwayland surface %p %dx%d @ %d,%d map_request %d,%d\n",
+		  window->id, window->surface, window->shsurf,
+		  window->width, window->height,
+		  window->x, window->y,
+		  window->map_request_x, window->map_request_y);
 
 	if (window->name)
 		xwayland_interface->set_title(window->shsurf, window->name);
