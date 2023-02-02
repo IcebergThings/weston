@@ -2190,6 +2190,10 @@ rdp_rail_update_window(struct weston_surface *surface,
 				window_state_order.showState = WINDOW_HIDE;
 				break;
 			case RDP_WINDOW_SHOW:
+				/* if previoulsy hidden, send minmax info */
+				if (rail_state->showState == WINDOW_HIDE &&
+				    api && api->request_window_minmax_info)
+					api->request_window_minmax_info(surface);
 				window_state_order.showState = WINDOW_SHOW;
 				break;
 			case RDP_WINDOW_SHOW_MINIMIZED:
@@ -3165,7 +3169,7 @@ disp_monitor_layout_change_callback(bool freeOnly, void *dataIn)
 	RdpPeerContext *peerCtx = (RdpPeerContext *)client->context;
 	struct rdp_backend *b = peerCtx->rdpBackend;
 	RDPGFX_RESET_GRAPHICS_PDU reset_graphics = {};
-	MONITOR_DEF *reset_monitor_def;
+	MONITOR_DEF *reset_monitor_def = NULL;
 
 	assert_compositor_thread(b);
 
@@ -3288,16 +3292,18 @@ rdp_rail_peer_activate(freerdp_peer* client)
 	RdpPeerContext *peer_ctx = (RdpPeerContext *)client->context;
 	struct rdp_backend *b = peer_ctx->rdpBackend;
 	rdpSettings *settings = client->context->settings;
-	RailServerContext *rail_ctx;
-	RdpgfxServerContext *gfx_ctx;
-	DispServerContext *disp_ctx;
+	RailServerContext *rail_ctx = NULL;
+	RdpgfxServerContext *gfx_ctx = NULL;
+	DispServerContext *disp_ctx = NULL;
 	bool rail_server_started = false;
 	bool disp_server_opened = false;
 	bool rail_grfx_server_opened = false;
 #ifdef HAVE_FREERDP_GFXREDIR_H
+	GfxRedirServerContext *redir_ctx = NULL;
 	bool gfxredir_server_opened = false;
 #endif /* HAVE_FREERDP_GFXREDIR_H */
 #ifdef HAVE_FREERDP_RDPAPPLIST_H
+	RdpAppListServerContext *applist_ctx = NULL;
 	bool applist_server_opened = false;
 	RDPAPPLIST_SERVER_CAPS_PDU app_list_caps = {};
 #endif /* HAVE_FREERDP_RDPAPPLIST_H */
@@ -3403,7 +3409,6 @@ rdp_rail_peer_activate(freerdp_peer* client)
 	rail_grfx_server_opened = TRUE;
 
 #ifdef HAVE_FREERDP_GFXREDIR_H
-	GfxRedirServerContext *redir_ctx;
 	/* open Graphics Redirection channel. */
 	if (b->use_gfxredir) {
 
@@ -3422,7 +3427,6 @@ rdp_rail_peer_activate(freerdp_peer* client)
 #endif /* HAVE_FREERDP_GFXREDIR_H */
 
 #ifdef HAVE_FREERDP_RDPAPPLIST_H
-	RdpAppListServerContext *applist_ctx;
 	/* open Application List channel. */
 	if (b->rdprail_shell_name && b->use_rdpapplist) {
 		applist_ctx = b->rdpapplist_server_context_new(peer_ctx->vcm);
@@ -3656,13 +3660,75 @@ rdp_rail_sync_window_status(freerdp_peer *client)
 	weston_compositor_damage_all(b->compositor);
 }
 
-void
+static void
+rdp_rail_send_window_minmax_info(
+	struct weston_surface* surface,
+	struct weston_rdp_rail_window_pos* maxPosSize,
+	struct weston_size* minTrackSize,
+	struct weston_size* maxTrackSize)
+{
+	struct weston_compositor *compositor = surface->compositor;
+	struct weston_surface_rail_state *rail_state = surface->backend_state;
+	struct rdp_backend *b = to_rdp_backend(compositor);
+	RdpPeerContext *peer_ctx;
+	RailServerContext *rail_ctx;
+	RAIL_MINMAXINFO_ORDER minmax_order;
+	int dummyX = 0, dummyY = 0;
+
+	if (!b->rdp_peer || !b->rdp_peer->context->settings->HiDefRemoteApp) {
+		return;
+	}
+
+	peer_ctx = (RdpPeerContext *)b->rdp_peer->context;
+
+	/* apply global to output transform, and translate to client coordinate */
+	if (surface->output) {
+		to_client_coordinate(peer_ctx, surface->output,
+				     &maxPosSize->x, &maxPosSize->y,
+				     &maxPosSize->width, &maxPosSize->height);
+		to_client_coordinate(peer_ctx, surface->output,
+				     &dummyX, &dummyY,
+				     &minTrackSize->width, &minTrackSize->height);
+		to_client_coordinate(peer_ctx, surface->output,
+				     &dummyX, &dummyY,
+				     &maxTrackSize->width, &maxTrackSize->height);
+	}
+
+	/* Inform the RDP client about the minimum/maximum width and height allowed
+	 * on this window.
+	 */
+	minmax_order.windowId = rail_state->window_id;
+	minmax_order.maxPosX = maxPosSize->x;
+	minmax_order.maxPosY = maxPosSize->y;
+	minmax_order.maxWidth = maxPosSize->width;
+	minmax_order.maxHeight = maxPosSize->height;
+	minmax_order.minTrackWidth = minTrackSize->width;
+	minmax_order.minTrackHeight = minTrackSize->height;
+	minmax_order.maxTrackWidth = maxTrackSize->width;
+	minmax_order.maxTrackHeight = maxTrackSize->height;
+
+	rdp_debug_verbose(b,
+		  "Minmax order: maxPosX:%d, maxPosY:%d, maxWidth:%d, maxHeight:%d\n",
+		  minmax_order.maxPosX,
+		  minmax_order.maxPosY,
+		  minmax_order.maxWidth,
+		  minmax_order.maxHeight);
+	rdp_debug_verbose(b,
+		  "Minmax order: minTrackWidth:%d, minTrackHeight:%d, maxTrackWidth:%d, maxTrackHeight:%d\n",
+		  minmax_order.minTrackWidth,
+		  minmax_order.minTrackHeight,
+		  minmax_order.maxTrackWidth,
+		  minmax_order.maxTrackHeight);
+
+	rail_ctx = peer_ctx->rail_server_context;
+	rail_ctx->ServerMinMaxInfo(rail_ctx, &minmax_order);
+}
+
+static void
 rdp_rail_start_window_move(
 	struct weston_surface* surface,
 	int pointerGrabX,
-	int pointerGrabY,
-	struct weston_size minSize,
-	struct weston_size maxSize)
+	int pointerGrabY)
 {
 	struct weston_compositor *compositor = surface->compositor;
 	struct weston_surface_rail_state *rail_state = surface->backend_state;
@@ -3675,7 +3741,6 @@ rdp_rail_start_window_move(
 	struct rdp_backend *b = to_rdp_backend(compositor);
 	const struct weston_rdprail_shell_api *api = b->rdprail_shell_api;
 	RdpPeerContext *peer_ctx;
-	RAIL_MINMAXINFO_ORDER minmax_order;
 	RAIL_LOCALMOVESIZE_ORDER move_order;
 	int posX = 0, posY = 0;
 	int numViews = 0;
@@ -3713,47 +3778,14 @@ rdp_rail_start_window_move(
 	/* apply global to output transform, and translate to client coordinate */
 	if (surface->output) {
 		to_client_coordinate(peer_ctx, surface->output,
-				     &posX, &posY,
-				     &minSize.width, &minSize.height);
+				     &posX, &posY, NULL, NULL);
 		to_client_coordinate(peer_ctx, surface->output,
-				     &pointerGrabX, &pointerGrabY,
-				     &maxSize.width, &maxSize.height);
+				     &pointerGrabX, &pointerGrabY, NULL, NULL);
 	}
 
 	rdp_debug(b, "============== StartWindowMove ==============\n");
 	rdp_debug(b, "WindowsPosition: Pre-move (%d,%d) at client.\n", posX, posY);
 	rdp_debug(b, "pointerGrab: (%d,%d)\n", pointerGrabX, pointerGrabY);
-	rdp_debug(b, "minSize: (%dx%d)\n", minSize.width, minSize.height);
-	rdp_debug(b, "maxSize: (%dx%d)\n", maxSize.width, maxSize.height);
-
-	/* Inform the RDP client about the minimum/maximum width and height allowed
-	 * on this window.
-	 */
-	minmax_order.windowId = rail_state->window_id;
-	minmax_order.maxPosX = 0;
-	minmax_order.maxPosY = 0;
-	minmax_order.maxWidth = 0;
-	minmax_order.maxHeight = 0;
-	minmax_order.minTrackWidth = minSize.width;
-	minmax_order.minTrackHeight = minSize.height;
-	minmax_order.maxTrackWidth = maxSize.width;
-	minmax_order.maxTrackHeight = maxSize.height;
-
-	rdp_debug(b,
-		  "Minmax order: maxPosX:%d, maxPosY:%d, maxWidth:%d, maxHeight:%d\n",
-		  minmax_order.maxPosX,
-		  minmax_order.maxPosY,
-		  minmax_order.maxWidth,
-		  minmax_order.maxHeight);
-	rdp_debug(b,
-		  "Minmax order: minTrackWidth:%d, minTrackHeight:%d, maxTrackWidth:%d, maxTrackHeight:%d\n",
-		  minmax_order.minTrackWidth,
-		  minmax_order.minTrackHeight,
-		  minmax_order.maxTrackWidth,
-		  minmax_order.maxTrackHeight);
-
-	rail_ctx = peer_ctx->rail_server_context;
-	rail_ctx->ServerMinMaxInfo(rail_ctx, &minmax_order);
 
 	/* Start the local Window move.
 	 */
@@ -3771,12 +3803,13 @@ rdp_rail_start_window_move(
 		  move_order.posX,
 		  move_order.posY);
 
+	rail_ctx = peer_ctx->rail_server_context;
 	rail_ctx->ServerLocalMoveSize(rail_ctx, &move_order);
 
-	rdp_debug(b, "=============== StartWindowMove ===============\n");
+	rdp_debug(b, "============== StartWindowMove ==============\n");
 }
 
-void
+static void
 rdp_rail_end_window_move(struct weston_surface *surface)
 {
 	struct weston_compositor *compositor = surface->compositor;
@@ -4696,6 +4729,7 @@ struct weston_rdprail_api rdprail_api = {
 	.shell_initialize_notify = rdp_rail_shell_initialize_notify,
 	.start_window_move = rdp_rail_start_window_move,
 	.end_window_move = rdp_rail_end_window_move,
+	.send_window_minmax_info = rdp_rail_send_window_minmax_info,
 	.set_window_icon = rdp_rail_set_window_icon,
 #ifdef HAVE_FREERDP_RDPAPPLIST_H
 	.notify_app_list = rdp_rail_notify_app_list,
