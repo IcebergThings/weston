@@ -1250,14 +1250,18 @@ move_grab_motion(struct weston_pointer_grab *grab,
 
 	/* if local move is expected, but recieved the mouse move,
 	   then cacenl local move. */
-	if (shsurf->shell->is_localmove_pending) {
+	if (shsurf->shell->is_localmove_pending &&
+		(pointer->grab_x != pointer->x ||
+		 pointer->grab_y != pointer->y)) {
 		shell_rdp_debug_verbose(shsurf->shell, "%s: mouse move is detected while attempting local move\n", __func__);
 		shsurf->shell->is_localmove_pending = false;
 	}
 
 	surface = weston_desktop_surface_get_surface(shsurf->desktop_surface);
 
-	if (shsurf->snapped.is_snapped) {
+	if (shsurf->snapped.is_snapped &&
+		(pointer->grab_x != pointer->x ||
+		 pointer->grab_y != pointer->y)) {
 		grab_unsnap_motion(grab);
 	} else {
 		constrain_position(move, &cx, &cy);
@@ -1844,10 +1848,16 @@ unset_maximized(struct shell_surface *shsurf)
 	shsurf->saved_showstate_valid = false;
 
 	if (shsurf->snapped.is_snapped) {
-		/* Restore to snap state.
-		 */
-		weston_desktop_surface_set_size(shsurf->desktop_surface, shsurf->snapped.width, shsurf->snapped.height);
-		weston_view_set_position(shsurf->view, shsurf->snapped.x, shsurf->snapped.y);
+		/* If previously snapped state, don't go back to snap, but restore */
+		/* weston_desktop_surface_set_size() expects the size in window geometry coordinates */
+		/* saved_width and saved_height is already based on window geometry. */
+		weston_desktop_surface_set_size(
+			shsurf->desktop_surface,
+			shsurf->snapped.saved_width, shsurf->snapped.saved_height);
+		weston_view_set_position(shsurf->view, 
+			shsurf->snapped.saved_x, shsurf->snapped.saved_y);
+		shsurf->snapped.is_snapped = false;
+		rail_state->isWindowSnapped = false;
 	} else {
 		/* Restore to previous size or make up one if the window started maximized.
 		 */
@@ -1947,7 +1957,8 @@ grab_unsnap_motion(struct weston_pointer_grab *grab)
 		weston_desktop_surface_get_surface(shsurf->desktop_surface);
 	struct weston_surface_rail_state *rail_state =
 		(struct weston_surface_rail_state *)surface->backend_state;
-	int cx, cy, dx;
+	int cx, cy, geometry_offset;
+	float dx, move_dx;
 
 	if (!shsurf->snapped.is_snapped)
 		return;
@@ -1957,33 +1968,51 @@ grab_unsnap_motion(struct weston_pointer_grab *grab)
 
 	/* window is no longer in snap state */
 	shsurf->snapped.is_snapped = false;
+	rail_state->isWindowSnapped = false;
 	rail_state->showState_requested = RDP_WINDOW_SHOW;
 	shsurf->saved_showstate_valid = false;
+
+	geometry_offset = shsurf->snapped.saved_surface_width -
+			  shsurf->snapped.saved_width;
+	geometry_offset /= 2;
+
+	/* Reposition the window such that the mouse remain within the 
+	 * new bound of the window after resize. */
+	/* calc based on pointer position based on current (snapped) window size */
+	/* move->dx is offset of pointer position from window origin */
+	dx = wl_fixed_to_double(move->dx) / surface->width;
+	dx = fabsf(dx);
+	/* calc the distance based on unsnapped window size */
+	cx = shsurf->snapped.saved_width * dx;
+	/* add window geometry offset */
+	cx += geometry_offset;
+	/* obtain new window offset from current pointer position */
+	cx = wl_fixed_to_int(pointer->x) - cx;
+	cy = shsurf->view->geometry.y; /* unchanged */
+
+	/* adjust move->dx based on new position */
+	move_dx = wl_fixed_from_int(cx) - pointer->grab_x;
+
+	shell_rdp_debug(shsurf->shell, "%s: restore surface:%p at (%d,%d) size:%dx%d from (%d,%d) size:%dx%d\n",
+			__func__, surface,
+			cx, cy,
+			shsurf->snapped.saved_width, shsurf->snapped.saved_height,
+			(int)shsurf->view->geometry.x, (int)shsurf->view->geometry.y,
+			surface->width, surface->height);
+	shell_rdp_debug(shsurf->shell, "%s: restore surface:%p, geometry_offset:%d, grab_ratio:%f, move_dx:%d->%d\n",
+			__func__, surface, geometry_offset, dx,
+			wl_fixed_to_int(move->dx), wl_fixed_to_int(move_dx));
 
 	/* restore original size */
 	weston_desktop_surface_set_size(shsurf->desktop_surface,
 			shsurf->snapped.saved_width,
 			shsurf->snapped.saved_height);
 
-	/* Reposition the window such that the mouse remain within the 
-	 * new bound of the window after resize. */
-	dx = wl_fixed_to_int(move->dx);
-	if (abs(dx) < surface->width / 2) {
-		/* keep left edge pos, resize from right edge */
-		cx = shsurf->view->geometry.x;
-	} else {
-		/* keep right edge pos, resize from left edge */
-		cx = (shsurf->view->geometry.x + surface->width) - shsurf->snapped.saved_surface_width;
-	}
-	cy = shsurf->view->geometry.y + wl_fixed_to_int(move->dy);
+	/* and move to new position reletive to pointer */
 	weston_view_set_position(shsurf->view, cx, cy);
-	move->dx = wl_fixed_from_int(cx - wl_fixed_to_int(pointer->x));
 
-	shell_rdp_debug_verbose(shsurf->shell, "%s: restore surface:%p at (%d,%d) (%dx%d), new move_dx:%d\n",
-			__func__, surface, cx, cy,
-			shsurf->snapped.saved_width,
-			shsurf->snapped.saved_height,
-			wl_fixed_to_int(move->dx));
+	/* update move_dx based on new position */
+	move->dx = move_dx;
 }
 
 static struct desktop_shell *
@@ -2921,6 +2950,7 @@ shell_backend_request_window_restore(struct weston_surface *surface)
 		weston_view_set_position(shsurf->view, 
 			shsurf->snapped.saved_x, shsurf->snapped.saved_y);
 		shsurf->snapped.is_snapped = false;
+		rail_state->isWindowSnapped = false;
 	} else if (shsurf->state.fullscreen) {
 		/* fullscreen is treated as normal (aka restored) state in
 		   Windows client, thus there should be not be 'restore'
@@ -2976,9 +3006,11 @@ shell_backend_request_window_snap(struct weston_surface *surface, int x, int y, 
 	struct weston_view *view;
 	struct shell_surface *shsurf = get_shell_surface(surface);
 	struct weston_geometry geometry;
+	struct weston_surface_rail_state *rail_state =
+		(struct weston_surface_rail_state *)surface->backend_state;
 
 	view = get_default_view(surface);
-	if (!view || !shsurf)
+	if (!view || !shsurf || !rail_state)
 		return;
 
 	if (shsurf->shell->is_localmove_pending) {
@@ -3021,6 +3053,7 @@ shell_backend_request_window_snap(struct weston_surface *surface, int x, int y, 
 		shsurf->snapped.saved_height = geometry.height;
 	}
 	shsurf->snapped.is_snapped = true;
+	rail_state->isWindowSnapped = true;
 
 	if (surface->width != width || surface->height != height) {
 		struct weston_desktop_surface *desktop_surface =

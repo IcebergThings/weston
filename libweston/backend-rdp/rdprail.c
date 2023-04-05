@@ -353,31 +353,19 @@ rail_client_SnapArrange_callback(bool freeOnly, void *arg)
 			snap_rect.y = snap->top;
 			snap_rect.width = snap->right - snap->left;
 			snap_rect.height = snap->bottom - snap->top;
-			/* SnapArrange PDU include window resize margin */
-			/* [MS-RDPERP] - v20200304 - 3.2.5.1.6 Processing Window Information Orders
-			    However, the Client Window Move PDU (section 2.2.2.7.4) and Client Window Snap PDU
-			    (section 2.2.2.7.5) do include resize margins in the window boundaries. */
-			snap_rect.x += rail_state->window_margin_left;
-			snap_rect.y += rail_state->window_margin_top;
-			snap_rect.width -= rail_state->window_margin_left +
-					   rail_state->window_margin_right;
-			snap_rect.height -= rail_state->window_margin_top +
-					    rail_state->window_margin_bottom;
 			to_weston_coordinate(peer_ctx,
 					     &snap_rect.x,
 					     &snap_rect.y,
 					     &snap_rect.width,
 					     &snap_rect.height);
-			if (is_window_shadow_remoting_disabled(peer_ctx)) {
-				/* offset window shadow area */
-				/* window_geometry here is last commited geometry */
-				api->get_window_geometry(surface,
-							 &geometry);
-				snap_rect.x -= geometry.x;
-				snap_rect.y -= geometry.y;
-				snap_rect.width += (surface->width - geometry.width);
-				snap_rect.height += (surface->height - geometry.height);
-			}
+			/* offset window shadow area as there is no shadow when snapped */
+			/* window_geometry here is last commited geometry */
+			api->get_window_geometry(surface,
+						 &geometry);
+			snap_rect.x -= geometry.x;
+			snap_rect.y -= geometry.y;
+			snap_rect.width += (surface->width - geometry.width);
+			snap_rect.height += (surface->height - geometry.height);
 			api->request_window_snap(surface,
 						 snap_rect.x,
 						 snap_rect.y,
@@ -433,22 +421,25 @@ rail_client_WindowMove_callback(bool freeOnly, void *arg)
 			windowMoveRect.y = windowMove->top;
 			windowMoveRect.width = windowMove->right - windowMove->left;
 			windowMoveRect.height = windowMove->bottom - windowMove->top;
-			/* WindowMove PDU include window resize margin */
-			/* [MS-RDPERP] - v20200304 - 3.2.5.1.6 Processing Window Information Orders
-			    However, the Client Window Move PDU (section 2.2.2.7.4) and Client Window Snap PDU
-			    (section 2.2.2.7.5) do include resize margins in the window boundaries. */
-			windowMoveRect.x += rail_state->window_margin_left;
-			windowMoveRect.y += rail_state->window_margin_top;
-			windowMoveRect.width -= rail_state->window_margin_left +
-						rail_state->window_margin_right;
-			windowMoveRect.height -= rail_state->window_margin_top +
-						 rail_state->window_margin_bottom;
+			if (!rail_state->isWindowSnapped) {
+				/* WindowMove PDU include window resize margin */
+				/* [MS-RDPERP] - v20200304 - 3.2.5.1.6 Processing Window Information Orders
+				    However, the Client Window Move PDU (section 2.2.2.7.4) and Client Window Snap PDU
+				    (section 2.2.2.7.5) do include resize margins in the window boundaries. */
+				windowMoveRect.x += rail_state->window_margin_left;
+				windowMoveRect.y += rail_state->window_margin_top;
+				windowMoveRect.width -= rail_state->window_margin_left +
+							rail_state->window_margin_right;
+				windowMoveRect.height -= rail_state->window_margin_top +
+							 rail_state->window_margin_bottom;
+			}
 			to_weston_coordinate(peer_ctx,
 					     &windowMoveRect.x,
 					     &windowMoveRect.y,
 					     &windowMoveRect.width,
 					     &windowMoveRect.height);
-			if (is_window_shadow_remoting_disabled(peer_ctx)) {
+			if (is_window_shadow_remoting_disabled(peer_ctx) ||
+				rail_state->isWindowSnapped) {
 				/* offset window shadow area */
 				/* window_geometry here is last commited geometry */
 				api->get_window_geometry(surface,
@@ -2094,34 +2085,37 @@ rdp_rail_update_window(struct weston_surface *surface,
 				  __func__, rail_state->window_id);
 	}
 
-	if (is_window_shadow_remoting_disabled(peer_ctx)) {
+	if (is_window_shadow_remoting_disabled(peer_ctx) ||
+		rail_state->isWindowSnapped) {
 		/* drop window shadow area */
 		api->get_window_geometry(surface, &geometry);
 
-		/* calculate window margin from input extents */
-		if (geometry.x > max(0, surface->input.extents.x1))
-			window_margin_left = geometry.x -
+		if (!rail_state->isWindowSnapped) {
+			/* calculate window margin from input extents */
+			if (geometry.x > max(0, surface->input.extents.x1))
+				window_margin_left = geometry.x -
 					     max(0, surface->input.extents.x1);
-		window_margin_left = max(window_margin_left,
-					 RDP_RAIL_WINDOW_RESIZE_MARGIN);
+			window_margin_left = max(window_margin_left,
+						 RDP_RAIL_WINDOW_RESIZE_MARGIN);
 
-		if (geometry.y > max(0, surface->input.extents.y1))
-			window_margin_top = geometry.y -
-					    max(0, surface->input.extents.y1);
-		window_margin_top = max(window_margin_top,
-					RDP_RAIL_WINDOW_RESIZE_MARGIN);
+			if (geometry.y > max(0, surface->input.extents.y1))
+				window_margin_top = geometry.y -
+						    max(0, surface->input.extents.y1);
+			window_margin_top = max(window_margin_top,
+						RDP_RAIL_WINDOW_RESIZE_MARGIN);
 
-		if (min(surface->input.extents.x2, surface->width) > (geometry.x + geometry.width))
-			window_margin_right = min(surface->input.extents.x2, surface->width) -
-					      (geometry.x + geometry.width);
-		window_margin_right = max(window_margin_right,
-					  RDP_RAIL_WINDOW_RESIZE_MARGIN);
+			if (min(surface->input.extents.x2, surface->width) > (geometry.x + geometry.width))
+				window_margin_right = min(surface->input.extents.x2, surface->width) -
+						      (geometry.x + geometry.width);
+			window_margin_right = max(window_margin_right,
+						  RDP_RAIL_WINDOW_RESIZE_MARGIN);
 
-		if (min(surface->input.extents.y2, surface->height) > (geometry.y + geometry.height))
-			window_margin_bottom = min(surface->input.extents.y2, surface->height) -
+			if (min(surface->input.extents.y2, surface->height) > (geometry.y + geometry.height))
+				window_margin_bottom = min(surface->input.extents.y2, surface->height) -
 					       (geometry.y + geometry.height);
-		window_margin_bottom = max(window_margin_bottom,
-					   RDP_RAIL_WINDOW_RESIZE_MARGIN);
+			window_margin_bottom = max(window_margin_bottom,
+						   RDP_RAIL_WINDOW_RESIZE_MARGIN);
+		}
 
 		/* offset window origin by window geometry */
 		newClientPos.x += geometry.x;
@@ -2138,7 +2132,8 @@ rdp_rail_update_window(struct weston_surface *surface,
 				     &newClientPos.width,
 				     &newClientPos.height);
 
-		if (is_window_shadow_remoting_disabled(peer_ctx)) {
+		if (is_window_shadow_remoting_disabled(peer_ctx) ||
+			rail_state->isWindowSnapped) {
 			to_client_coordinate(peer_ctx, surface->output,
 					     &window_margin_left,
 					     &window_margin_top,
@@ -2626,7 +2621,8 @@ rdp_rail_update_window(struct weston_surface *surface,
 			}
 			/* damage_box represents damaged area in contentBuffer */
 			/* if it's not remoting window shadow, exclude the area from damage_box */
-			if (is_window_shadow_remoting_disabled(peer_ctx)) {
+			if (is_window_shadow_remoting_disabled(peer_ctx) ||
+				rail_state->isWindowSnapped) {
 				if (damage_box.x1 < content_buffer_window_geometry.x)
 					damage_box.x1 = content_buffer_window_geometry.x;
 				if (damage_box.x2 > content_buffer_window_geometry.x + content_buffer_window_geometry.width)
