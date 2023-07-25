@@ -847,6 +847,14 @@ struct rdp_to_xkb_keyboard_layout {
 /* 0x50429 is for Dari (Afghanistan) */
 #define KBD_PERSIAN 0x50429
 #endif
+#ifndef KBD_FRENCH_STANDARD_BEPO
+/* 0x2040c is for French (Standard, Bepo) */
+#define KBD_FRENCH_STANDARD_BEPO 0x2040c
+#endif
+#ifndef KBD_FRENCH_STANDARD_AZERTY
+/* 0x1040c is for French (Standard, AZERTY) */
+#define KBD_FRENCH_STANDARD_AZERTY 0x1040c
+#endif
 
 static const
 struct rdp_to_xkb_keyboard_layout rdp_keyboards[] = {
@@ -871,6 +879,8 @@ struct rdp_to_xkb_keyboard_layout rdp_keyboards[] = {
 	{KBD_SPANISH_VARIATION, "es", "nodeadkeys"},
 	{KBD_FINNISH, "fi", 0},
 	{KBD_FRENCH, "fr", 0},
+	{KBD_FRENCH_STANDARD_BEPO, "fr", "bepo"},
+	{KBD_FRENCH_STANDARD_AZERTY, "fr", "afnor"},
 	{KBD_HEBREW, "il", 0},
 	{KBD_HEBREW_STANDARD, "il", "basic"},
 	{KBD_HUNGARIAN, "hu", 0},
